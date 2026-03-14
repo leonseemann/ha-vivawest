@@ -3,6 +3,7 @@ Vivawest Home Assistant Add-on
 Liest Kaltwasser- und Warmwasser-Messwerte und veröffentlicht sie
 als HA-Sensoren via MQTT Discovery.
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -24,10 +25,10 @@ log = logging.getLogger("vivawest")
 # ---------------------------------------------------------------------------
 # Konstanten
 # ---------------------------------------------------------------------------
-VIVAWEST_BASE         = "https://api.kundenportal.vivawest.de"
-VIVAWEST_BEARER       = "7d2e1b552a69092edff3b2212c5985e051a7e934"
+VIVAWEST_BASE = "https://api.kundenportal.vivawest.de"
+VIVAWEST_BEARER = "7d2e1b552a69092edff3b2212c5985e051a7e934"
 MQTT_DISCOVERY_PREFIX = "homeassistant"
-MIN_INTERVAL_HOURS    = 1
+MIN_INTERVAL_HOURS = 1
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +39,12 @@ def load_config() -> dict:
     if not os.path.exists(options_path):
         log.warning("options.json nicht gefunden – nutze Umgebungsvariablen.")
         return {
-            "login":               os.environ.get("VIVAWEST_LOGIN", ""),
-            "password":            os.environ.get("VIVAWEST_PASSWORD", ""),
-            "mqtt_host":           os.environ.get("MQTT_HOST", "core-mosquitto"),
-            "mqtt_port":           int(os.environ.get("MQTT_PORT", "1883")),
-            "mqtt_user":           os.environ.get("MQTT_USER", ""),
-            "mqtt_password":       os.environ.get("MQTT_PASSWORD", ""),
+            "login": os.environ.get("VIVAWEST_LOGIN", ""),
+            "password": os.environ.get("VIVAWEST_PASSWORD", ""),
+            "mqtt_host": os.environ.get("MQTT_HOST", "core-mosquitto"),
+            "mqtt_port": int(os.environ.get("MQTT_PORT", "1883")),
+            "mqtt_user": os.environ.get("MQTT_USER", ""),
+            "mqtt_password": os.environ.get("MQTT_PASSWORD", ""),
             "poll_interval_hours": int(os.environ.get("POLL_INTERVAL_HOURS", "1")),
         }
     with open(options_path) as f:
@@ -105,9 +106,9 @@ def get_uvi_current(session_token: str) -> dict:
 # MQTT Helpers
 # ---------------------------------------------------------------------------
 def publish_discovery(client: mqtt.Client, sensor_id: str, name: str,
-                       unit: str, device_class: str | None = None,
-                       state_class: str | None = None,
-                       icon: str | None = None) -> None:
+                      unit: str, device_class: str | None = None,
+                      state_class: str | None = None,
+                      icon: str | None = None) -> None:
     topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/vivawest_{sensor_id}/config"
     payload = {
         "name": name,
@@ -150,8 +151,8 @@ def process_and_publish(client: mqtt.Client, uvi_data: dict) -> None:
     if kw:
         publish_state(client, "kaltwasser_verbrauch", kw.get("verbrauchswert"), {
             "ablesedatum": kw.get("ablesedatum"),
-            "monat":       kw.get("monat"),
-            "jahr":        kw.get("jahr"),
+            "monat": kw.get("monat"),
+            "jahr": kw.get("jahr"),
         })
     else:
         log.warning("Keine Kaltwasser-Daten in der Antwort.")
@@ -160,13 +161,13 @@ def process_and_publish(client: mqtt.Client, uvi_data: dict) -> None:
     if ww:
         publish_state(client, "warmwasser_verbrauch", ww.get("verbrauchswert"), {
             "ablesedatum": ww.get("ablesedatum"),
-            "monat":       ww.get("monat"),
-            "jahr":        ww.get("jahr"),
+            "monat": ww.get("monat"),
+            "jahr": ww.get("jahr"),
         })
         publish_state(client, "warmwasser_kwh", ww.get("kwh"), {
             "ablesedatum": ww.get("ablesedatum"),
-            "monat":       ww.get("monat"),
-            "jahr":        ww.get("jahr"),
+            "monat": ww.get("monat"),
+            "jahr": ww.get("jahr"),
         })
     else:
         log.warning("Keine Warmwasser-Daten in der Antwort.")
@@ -196,7 +197,7 @@ def register_sensors(client: mqtt.Client) -> None:
 def main() -> None:
     cfg = load_config()
 
-    login    = cfg["login"]
+    login = cfg["login"]
     password = cfg["password"]
 
     if not login or not password:
@@ -220,7 +221,7 @@ def main() -> None:
     while True:
         try:
             log.info("=== Starte Abfrage-Zyklus ===")
-            token    = get_session_token(login, password)
+            token = get_session_token(login, password)
             uvi_data = get_uvi_current(token)
             process_and_publish(mqtt_client, uvi_data)
             log.info("Nächste Abfrage in %d Stunde(n).", poll_interval_sec // 3600)
