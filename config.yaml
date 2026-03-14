@@ -1,0 +1,28 @@
+name: "Vivawest"
+description: "Liest Wasser-Messwerte aus dem Vivawest Kundenportal und stellt sie als HA-Sensoren bereit."
+version: "1.0.6"
+slug: "vivawest"
+init: false
+
+arch:
+  - aarch64
+  - amd64
+  - armv7
+
+options:
+  login: ""
+  password: ""
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_password: ""
+  poll_interval_hours: 1
+
+schema:
+  login: str
+  password: password
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_user: str
+  mqtt_password: password
+  poll_interval_hours: int
