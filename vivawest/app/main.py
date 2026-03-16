@@ -8,7 +8,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
+import sys
 import time
+from typing import Optional
 
 import paho.mqtt.client as mqtt
 import requests
@@ -28,7 +31,11 @@ log = logging.getLogger("vivawest")
 VIVAWEST_BASE = "https://api.kundenportal.vivawest.de"
 VIVAWEST_BEARER = "7d2e1b552a69092edff3b2212c5985e051a7e934"
 MQTT_DISCOVERY_PREFIX = "homeassistant"
+MQTT_AVAILABILITY_TOPIC = "vivawest/availability"
 MIN_INTERVAL_HOURS = 1
+REQUEST_TIMEOUT = 15
+MQTT_CONNECT_RETRIES = 5
+MQTT_CONNECT_RETRY_DELAY = 10
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +63,7 @@ def get_poll_interval(cfg: dict) -> int:
     hours = int(cfg.get("poll_interval_hours", MIN_INTERVAL_HOURS))
     if hours < MIN_INTERVAL_HOURS:
         log.warning(
-            "Abfrageintervall %dh ist unter dem Minimum (%dh) – setze auf %dh.",
+            "Abfrageintervall %d h ist unter dem Minimum (%d h) – setze auf %d h.",
             hours, MIN_INTERVAL_HOURS, MIN_INTERVAL_HOURS,
         )
         hours = MIN_INTERVAL_HOURS
@@ -77,7 +84,7 @@ def get_session_token(login: str, password: str) -> str:
             "Content-Type": "application/json",
         },
         json={"email": login, "password": password, "v2": True},
-        timeout=15,
+        timeout=REQUEST_TIMEOUT,
     )
     resp.raise_for_status()
     token = resp.json().get("sessionToken")
@@ -96,7 +103,7 @@ def get_uvi_current(session_token: str) -> dict:
             "Authorization": f"Bearer {VIVAWEST_BEARER}",
             "x-session-token": session_token,
         },
-        timeout=15,
+        timeout=REQUEST_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
@@ -106,9 +113,9 @@ def get_uvi_current(session_token: str) -> dict:
 # MQTT Helpers
 # ---------------------------------------------------------------------------
 def publish_discovery(client: mqtt.Client, sensor_id: str, name: str,
-                      unit: str, device_class: str | None = None,
-                      state_class: str | None = None,
-                      icon: str | None = None) -> None:
+                      unit: str, device_class: Optional[str] = None,
+                      state_class: Optional[str] = None,
+                      icon: Optional[str] = None) -> None:
     topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/vivawest_{sensor_id}/config"
     payload = {
         "name": name,
@@ -117,6 +124,7 @@ def publish_discovery(client: mqtt.Client, sensor_id: str, name: str,
         "unit_of_measurement": unit,
         "value_template": "{{ value_json.value }}",
         "json_attributes_topic": f"vivawest/sensor/{sensor_id}/state",
+        "availability_topic": MQTT_AVAILABILITY_TOPIC,
         "device": {
             "identifiers": ["vivawest_addon"],
             "name": "Vivawest",
@@ -146,6 +154,9 @@ def publish_state(client: mqtt.Client, sensor_id: str, value, attributes: dict) 
 # ---------------------------------------------------------------------------
 def process_and_publish(client: mqtt.Client, uvi_data: dict) -> None:
     messwerte = uvi_data.get("messwerte", {})
+    if not messwerte:
+        log.warning("Keine 'messwerte' in der API-Antwort. Rohdaten: %s", uvi_data)
+        return
 
     kw = messwerte.get("kaltwasser")
     if kw:
@@ -192,6 +203,41 @@ def register_sensors(client: mqtt.Client) -> None:
 
 
 # ---------------------------------------------------------------------------
+# MQTT Client aufbauen
+# ---------------------------------------------------------------------------
+def build_mqtt_client(cfg: dict) -> mqtt.Client:
+    mqtt_client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+        client_id="vivawest_addon",
+    )
+
+    if cfg.get("mqtt_user"):
+        mqtt_client.username_pw_set(cfg["mqtt_user"], cfg.get("mqtt_password", ""))
+
+    # Last Will and Testament – HA zeigt "Nicht verfügbar" bei unerwartetem Absturz
+    mqtt_client.will_set(MQTT_AVAILABILITY_TOPIC, payload="offline", retain=True)
+
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            log.info("MQTT verbunden.")
+            client.publish(MQTT_AVAILABILITY_TOPIC, "online", retain=True)
+        else:
+            log.error("MQTT Verbindung fehlgeschlagen (RC=%d).", rc)
+
+    def on_disconnect(client, userdata, rc):
+        if rc != 0:
+            log.warning(
+                "MQTT unerwartet getrennt (RC=%d) – automatische Wiederverbindung aktiv.", rc
+            )
+
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.reconnect_delay_set(min_delay=5, max_delay=60)
+
+    return mqtt_client
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
@@ -207,14 +253,36 @@ def main() -> None:
     poll_interval_sec = get_poll_interval(cfg)
     log.info("Abfrageintervall: %d Stunde(n).", poll_interval_sec // 3600)
 
-    # MQTT verbinden
-    mqtt_client = mqtt.Client(client_id="vivawest_addon")
-    if cfg.get("mqtt_user"):
-        mqtt_client.username_pw_set(cfg["mqtt_user"], cfg.get("mqtt_password", ""))
+    mqtt_client = build_mqtt_client(cfg)
 
-    log.info("Verbinde mit MQTT-Broker %s:%s...", cfg.get("mqtt_host", "core-mosquitto"), cfg.get("mqtt_port", 1883))
-    mqtt_client.connect(cfg.get("mqtt_host", "core-mosquitto"), int(cfg.get("mqtt_port", 1883)), keepalive=60)
+    host = cfg.get("mqtt_host", "core-mosquitto")
+    port = int(cfg.get("mqtt_port", 1883))
+    log.info("Verbinde mit MQTT-Broker %s:%d...", host, port)
+
+    for attempt in range(1, MQTT_CONNECT_RETRIES + 1):
+        try:
+            mqtt_client.connect(host, port, keepalive=60)
+            break
+        except OSError as e:
+            log.error(
+                "MQTT-Verbindung fehlgeschlagen (Versuch %d/%d): %s",
+                attempt, MQTT_CONNECT_RETRIES, e,
+            )
+            if attempt == MQTT_CONNECT_RETRIES:
+                raise SystemExit(1)
+            time.sleep(MQTT_CONNECT_RETRY_DELAY)
+
     mqtt_client.loop_start()
+
+    def shutdown(signum, frame):
+        log.info("Beende Add-on (Signal %d)...", signum)
+        mqtt_client.publish(MQTT_AVAILABILITY_TOPIC, "offline", retain=True)
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
 
     register_sensors(mqtt_client)
 
@@ -229,6 +297,8 @@ def main() -> None:
             log.error("HTTP-Fehler: %s", e)
         except requests.Timeout:
             log.error("API-Timeout – nächster Versuch nach Wartezeit.")
+        except requests.ConnectionError as e:
+            log.error("Netzwerkfehler: %s – nächster Versuch nach Wartezeit.", e)
         except Exception as e:
             log.exception("Unerwarteter Fehler: %s", e)
 

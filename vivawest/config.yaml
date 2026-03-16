@@ -1,6 +1,6 @@
 name: "Vivawest"
 description: "Liest Wasser-Messwerte aus dem Vivawest Kundenportal und stellt sie als HA-Sensoren bereit."
-version: "1.0.7"
+version: "1.0.8"
 slug: "vivawest"
 init: false
 
