@@ -1,9 +1,17 @@
 {
   "domain": "vivawest",
   "name": "Vivawest",
-  "codeowners": ["@leonseemann"],
+  "categories": [
+    "water.meters_leak_detection",
+    "energy.meters_monitoring"
+  ],
+  "codeowners": [
+    "@leonseemann"
+  ],
   "config_flow": true,
-  "dependencies": ["recorder"],
+  "dependencies": [
+    "recorder"
+  ],
   "documentation": "https://github.com/leonseemann/ha-vivawest",
   "integration_type": "service",
   "iot_class": "cloud_polling",
