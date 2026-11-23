@@ -55,6 +55,39 @@
       },
       "vorauszahlung_heizkosten": {
         "name": "Heating costs prepayment"
+      },
+      "tv_versorgung": {
+        "name": "TV supply"
+      },
+      "ungelesene_nachrichten": {
+        "name": "Unread messages"
+      },
+      "portal_neuigkeiten": {
+        "name": "Portal notifications"
+      },
+      "offene_schadensmeldungen": {
+        "name": "Open damage reports"
+      },
+      "naechster_handwerkertermin": {
+        "name": "Next repair appointment"
+      },
+      "abrechnung": {
+        "name": "Settlement {art}"
+      },
+      "zaehler_kaltwasser": {
+        "name": "Cold water meter {raum}"
+      },
+      "zaehler_warmwasser": {
+        "name": "Hot water meter {raum}"
+      },
+      "zaehler_warmwasser_energie": {
+        "name": "Hot water meter {raum} energy"
+      },
+      "zaehler_heizenergie": {
+        "name": "Heat cost allocator {raum}"
+      },
+      "zaehler_heizenergie_energie": {
+        "name": "Heat cost allocator {raum} energy"
       }
     }
   }

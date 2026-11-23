@@ -14,7 +14,10 @@ Home Assistant, inklusive Langzeitstatistik für das Energie-Dashboard.
 - **Energie-Dashboard:** Jeder Monatsverbrauch wird rückwirkend gleichmäßig auf die
   Stunden des jeweiligen Monats verteilt und als Statistik importiert, inklusive aller
   Monate, die das Portal liefert (ca. 10–12)
+- **Zählerstände pro Einzelzähler:** jeder Wasserzähler und Heizkostenverteiler mit Raum
 - **Miete und Vorauszahlungen:** aktuelle Beträge und die nächste geplante Änderung
+- **Nebenkostenabrechnungen:** Nachzahlung oder Guthaben, Kosten, Prognose, neue Vorauszahlung
+- **Portal:** ungelesene Nachrichten, offene Schadensmeldungen, nächster Handwerkertermin
 - **Einrichtung per UI:** kein YAML, kein MQTT nötig
 
 ## Installation
@@ -53,11 +56,27 @@ Alle Sensoren gehören zum Gerät **Vivawest**.
 | Grundmiete | EUR | |
 | Vorauszahlung Betriebskosten | EUR | |
 | Vorauszahlung Heizkosten | EUR | |
+| TV-Versorgung | EUR | |
+| Kaltwasserzähler *Raum* | m³ | Zählerstand eines Einzelzählers |
+| Warmwasserzähler *Raum* (+ Energie) | m³ / kWh | Zählerstand eines Einzelzählers |
+| Heizkostenverteiler *Raum* | VE | Stand eines Heizkostenverteilers |
+| Abrechnung *Art* | EUR | Ergebnis der neuesten Abrechnung je Art (Betriebs-, Heiz-, Wasserkosten): positiv = Nachzahlung, negativ = Guthaben |
+| Ungelesene Nachrichten | | Postfach im Portal |
+| Neuigkeiten im Portal | | Benachrichtigungszähler des Portals |
+| Offene Schadensmeldungen | | Anzahl, Attribut `meldungen` mit Schaden, Status und Termin |
+| Nächster Handwerkertermin | Zeitpunkt | Beginn des Zeitfensters, „unbekannt“ ohne Termin |
 
 - **Verbrauchssensoren:** Attribute `ablesedatum`, `monat`, `jahr` und, falls vorhanden,
   `vergleich_liegenschaft_prozent` (Abweichung vom Hausdurchschnitt pro m²).
 - **Kostensensoren:** Attribute `gueltig_von`, `gueltig_bis` und bei geplanten Änderungen
   `naechster_betrag` / `naechste_aenderung`.
+- **Zählersensoren:** Sie entstehen automatisch für jeden Zähler, den das Portal meldet
+  (Zählertausch = neuer Sensor). Attribute `raum`, `zaehlernummer`, `monatsverbrauch`,
+  `ablesedatum`. Der Wert ändert sich nur einmal im Monat. Für das Energie-Dashboard sind
+  die Statistiken unten besser geeignet, weil sie den Verbrauch auf den Monat verteilen.
+- **Abrechnungssensoren:** Attribute `ergebnis` (Nachzahlung/Guthaben), `zeitraum_von/bis`,
+  `kosten`, `kosten_vorjahr`, `geleistete_vorauszahlungen`, `prognose`, `neue_vorauszahlung`,
+  `positionen` und, falls angegeben, `faellig_am` / `betrag_faellig`.
 
 ## Energie-Dashboard
 

@@ -33,6 +33,7 @@ custom_components/vivawest/
 ├── sensor.py            # SENSORS (EntityDescriptions), Konditions-Hilfsfunktionen
 ├── config_flow.py       # user- und reauth-Schritt
 ├── diagnostics.py       # Diagnose mit async_redact_data
+├── icons.json           # Icons je translation_key
 ├── strings.json         # Quelle für Übersetzungen (Englisch, mit [%key:...%])
 └── translations/        # en.json (aufgelöst), de.json – Custom Integrations nutzen nur diese
 hacs.json
@@ -51,17 +52,32 @@ Basis-URL `https://api.kundenportal.vivawest.de/rest/` (bis 11/2026: `/api/` mit
 | `uvi/current` | GET | `types`, `messwerte.<typ>` (letzter Monat), `heizenergieEinheit` |
 | `uvi/current/<typ>` | GET | `messwerte[]`: Monatsverlauf (neueste zuerst), `geraete[]`: Einzelzähler |
 | `contracts/conditions` | GET | Mietkonditionen als Zeiträume |
-| `additional-costs/settlements`, `additional-costs/details/<Ident>` | GET | Nebenkostenabrechnungen (nicht genutzt) |
+| `additional-costs/settlements` | GET | Abrechnungsarten mit Zeiträumen (`BillingOverview2Periods.results[{Ident, AbrechnungBis}]`) |
+| `additional-costs/details/<Ident>` | GET | `settlement` (Ergebnis, Kosten, Prognose, Positionen), `prepayments[]` |
+| `postbox/unread` | GET | `UnreadPostbox`, `UnreadArchiv` |
+| `damages/reports?status=progress\|closed&limit&offset` | GET | Schadensmeldungen (`results[]`) |
+| `notification-badges` | GET | `{<Vertragsnummer>: {count, badges[]}}` |
 | `logout` | PUT | Session beenden |
 
 - Auth-Header `X-Session-Id`, zusätzlich `X-Web-Version`. Cookies sind nicht nötig.
 - Fehler sind JSON `{"exception", "code", "message"}`. Falsches Passwort → 403
   `WebserviceException`, ohne Session → 401 `SessionException`. Beides wird zu
   `VivawestAuthError` → `ConfigEntryAuthFailed` → Reauth-Flow.
+- Alle Endpunkte außer Login und `uvi/*` werden über `_optional()` abgefragt: Fehler
+  (außer 401/403) setzen das Feld in `VivawestData` auf `None` / leer, statt den Abruf abzubrechen.
+- Nicht genutzt: `appwash` (500 ohne Waschküche), `maintenance`, `documents`, `contract-components/current`,
+  `contracts/service-partner` (persönliche Daten), `dashboard/<Vertragsnummer>`.
 - `typ` ∈ `heizenergie`, `kaltwasser`, `warmwasser`.
 - Monatseintrag: `{monat, jahr, ablesedatum, verbrauchswert, [kwh], [differenz_liegenschaft_qm_prozent]}`.
   `verbrauchswert` ist der **Monatsverbrauch** (Summe aller Zähler), kein Zählerstand.
   Heizung in VE, `kwh` vom Portal umgerechnet.
+- Einzelzähler: `uvi/current/<typ>` → `geraete[{geraet: {id, nr, typ (KWZ/WWZ/ELT), raum, einheit (CBM/""),
+  umrech_faktor, wohneinheit (Adressen!)}, messwerte[]}]`, Monate aufsteigend. Monate ohne Ablesung haben
+  nur `fehler_code`. Sonst `ablesewert` / `verbrauchswert` (Zählerstand), `verbrauchswert_delta_monatsende`
+  (Monatsverbrauch), bei Warmwasser zusätzlich `verbrauchswert_kwh` / `..._delta_monatsende_kwh`.
+  `_slim_meter()` verwirft `wohneinheit` und die wiederholten `geraet`-Blöcke.
+- Abrechnung: `AeErgebnis` > 0 = Nachzahlung, sonst Guthaben (wie im Portal). Datumsfelder können
+  Platzhalter wie `-001-11-30…` enthalten → `_valid_date()`.
 - Konditionen: `[{Gueltig, GueltigVon, GueltigBis, GrossAmountdec, ConditionItems.results[{Condtype,
   Xcondtypel, GrossAmountdec}]}]`. `Condtype`: `1000` Grundmiete, `3760` TV, `4000` VZ Betriebskosten,
   `4010` VZ Heizkosten.
@@ -90,7 +106,13 @@ Basis-URL `https://api.kundenportal.vivawest.de/rest/` (bis 11/2026: `/api/` mit
 - Kostensensoren: `select_periods()` wählt den aktuellen Zeitraum (Flag `Gueltig`, sonst per
   Datum). `naechster_betrag` / `naechste_aenderung` stammen aus dem ersten zukünftigen
   Zeitraum mit abweichendem Betrag (fehlende Position = 0 €).
-- Ein Sensor ist unavailable, wenn `value_fn` `None` liefert.
+- Ein Sensor ist unavailable, wenn `value_fn` `None` liefert (außer `allow_none=True`, z. B.
+  Handwerkertermin → „unbekannt“).
+- Dynamische Sensoren: `meter_descriptions()` (Key `zaehler_<geraet.id>[_energie]`) und
+  `settlement_descriptions()` (Key `abrechnung_<slug(Art)>`). Namen über `translation_key` +
+  `placeholders` (`{raum}`, `{art}`). `async_setup_entry` legt bei jedem Update neu
+  hinzugekommene an. Zählersensoren haben `state_class: total_increasing`.
+- Icons in `icons.json`.
 
 ## Konventionen
 

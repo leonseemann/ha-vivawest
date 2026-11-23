@@ -1,0 +1,69 @@
+{
+  "entity": {
+    "sensor": {
+      "kaltwasser": {
+        "default": "mdi:water"
+      },
+      "warmwasser": {
+        "default": "mdi:water-thermometer"
+      },
+      "warmwasser_energie": {
+        "default": "mdi:water-thermometer"
+      },
+      "heizenergie": {
+        "default": "mdi:radiator"
+      },
+      "heizung_verbrauchseinheiten": {
+        "default": "mdi:radiator"
+      },
+      "miete_gesamt": {
+        "default": "mdi:home-currency-usd"
+      },
+      "grundmiete": {
+        "default": "mdi:home-currency-usd"
+      },
+      "vorauszahlung_betriebskosten": {
+        "default": "mdi:cash-clock"
+      },
+      "vorauszahlung_heizkosten": {
+        "default": "mdi:cash-clock"
+      },
+      "tv_versorgung": {
+        "default": "mdi:television"
+      },
+      "ungelesene_nachrichten": {
+        "default": "mdi:email-outline",
+        "state": {
+          "0": "mdi:email-open-outline"
+        }
+      },
+      "portal_neuigkeiten": {
+        "default": "mdi:bell-outline"
+      },
+      "offene_schadensmeldungen": {
+        "default": "mdi:hammer-wrench"
+      },
+      "naechster_handwerkertermin": {
+        "default": "mdi:calendar-clock"
+      },
+      "abrechnung": {
+        "default": "mdi:receipt-text-outline"
+      },
+      "zaehler_kaltwasser": {
+        "default": "mdi:counter"
+      },
+      "zaehler_warmwasser": {
+        "default": "mdi:counter"
+      },
+      "zaehler_warmwasser_energie": {
+        "default": "mdi:counter"
+      },
+      "zaehler_heizenergie": {
+        "default": "mdi:radiator"
+      },
+      "zaehler_heizenergie_energie": {
+        "default": "mdi:radiator"
+      }
+    }
+  }
+}

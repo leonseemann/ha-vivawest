@@ -51,9 +51,50 @@ def make_data() -> VivawestData:
                [("1000", "Grundmiete Wohnung", 500.0), ("4000", "Vorauszahlung Betriebskosten", 140.0),
                 ("4010", "Vorauszahlung Heizkosten", 120.0)]),
     ]
+    def meter(gid, nr, typ, raum, einheit, werte, kwh=False):
+        messwerte = [{"monat": 7, "jahr": 2026, "fehler_code": 1}]  # Monat ohne Ablesung
+        for monat, stand, delta in werte:
+            m = {"monat": monat, "jahr": 2026, "ablesedatum": f"2026-{monat + 1:02d}-02T00:00:00+02:00",
+                 "ablesewert": stand, "verbrauchswert": stand,
+                 "verbrauchswert_delta_monatsende": delta}
+            if kwh:
+                m |= {"verbrauchswert_kwh": round(stand * 58, 2),
+                      "verbrauchswert_delta_monatsende_kwh": round(delta * 58, 2)}
+            messwerte.append(m)
+        return {"geraet": {"id": gid, "nr": nr, "typ": typ, "raum": raum, "einheit": einheit,
+                           "umrech_faktor": "1" if einheit else "2.1"},
+                "messwerte": messwerte}
+
+    meters = {
+        "kaltwasser": [
+            meter(101, "K-1", "KWZ", "Bad", "CBM", [(9, 40.1, 1.1), (10, 42.6, 2.5)]),
+            meter(102, "K-2", "KWZ", "Küche", "CBM", [(9, 10.0, 0.5), (10, 11.0, 1.0)]),
+        ],
+        "warmwasser": [meter(201, "W-1", "WWZ", "Bad", "CBM", [(10, 15.0, 1.1)], kwh=True)],
+        "heizenergie": [
+            meter(301, "H-1", "ELT", "Wohnzimmer", "", [(10, 50.0, 30.0)]),
+            meter(302, "H-2", "ELT", "Wohnzimmer", "", [(10, 20.0, 10.0)]),
+        ],
+    }
+    settlements = {"Betriebskosten": {
+        "AeErgebnis": -42.5, "KostenMv": 1957.5, "KostenMvVorjahr": 1900.0,
+        "Prepayments": 2000.0, "KostenMvPrognose": 1980.0, "LabelPrognose": "01/26 - 12/26",
+        "AbrechnungVon": "2025-01-01T00:00:00+01:00", "AbrechnungBis": "2025-12-31T00:00:00+01:00",
+        "NewUnitprice": 160, "FaelligZum": "-001-11-30T00:00:00+00:53", "BetragFaelligkeit": 0,
+        "Nebenkostenschluessel": {"results": [
+            {"Nksl": "2102", "NkslText": "Gebäudeversicherung", "KostenNkslMv": 247.76}]},
+    }}
+    damages = [
+        {"Schadensbeschreibung": "Fensterrahmen defekt", "Raum": "", "Anlagedatum": "2026-11-02",
+         "StatusTitle": "Schadensmeldung in Bearbeitung", "Termin": "2026-11-27",
+         "ZeitscheibeText": "07:00 Uhr"},
+        {"Schadensbeschreibung": "Lichtschalter defekt", "Raum": "Flur", "Anlagedatum": "2026-11-10",
+         "StatusTitle": "Schadensmeldung eingegangen", "Termin": "", "ZeitscheibeText": ""},
+    ]
     return VivawestData(partner_id=PARTNER_ID, current=current, heating_unit="ve",
                         history={"kaltwasser": kalt, "warmwasser": warm, "heizenergie": heiz},
-                        conditions=conditions)
+                        conditions=conditions, meters=meters, settlements=settlements,
+                        unread_messages=2, open_damages=damages, notifications=3)
 
 
 @pytest.fixture

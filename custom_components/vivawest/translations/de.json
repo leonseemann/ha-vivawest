@@ -55,6 +55,39 @@
       },
       "vorauszahlung_heizkosten": {
         "name": "Vorauszahlung Heizkosten"
+      },
+      "tv_versorgung": {
+        "name": "TV-Versorgung"
+      },
+      "ungelesene_nachrichten": {
+        "name": "Ungelesene Nachrichten"
+      },
+      "portal_neuigkeiten": {
+        "name": "Neuigkeiten im Portal"
+      },
+      "offene_schadensmeldungen": {
+        "name": "Offene Schadensmeldungen"
+      },
+      "naechster_handwerkertermin": {
+        "name": "Nächster Handwerkertermin"
+      },
+      "abrechnung": {
+        "name": "Abrechnung {art}"
+      },
+      "zaehler_kaltwasser": {
+        "name": "Kaltwasserzähler {raum}"
+      },
+      "zaehler_warmwasser": {
+        "name": "Warmwasserzähler {raum}"
+      },
+      "zaehler_warmwasser_energie": {
+        "name": "Warmwasserzähler {raum} Energie"
+      },
+      "zaehler_heizenergie": {
+        "name": "Heizkostenverteiler {raum}"
+      },
+      "zaehler_heizenergie_energie": {
+        "name": "Heizkostenverteiler {raum} Energie"
       }
     }
   }

@@ -9,7 +9,8 @@ from homeassistant.core import HomeAssistant
 
 from .coordinator import VivawestConfigEntry
 
-TO_REDACT = {CONF_EMAIL, CONF_PASSWORD, "partner_id", "Recnnr", "IntrenoCn", "ObjnrCn", "virtual_id"}
+TO_REDACT = {CONF_EMAIL, CONF_PASSWORD, "partner_id", "Recnnr", "IntrenoCn", "ObjnrCn", "virtual_id",
+             "SessionId", "Schadensort", "TelefonDl"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -23,6 +24,17 @@ async def async_get_config_entry_diagnostics(
             "heating_unit": data.heating_unit,
             "history_months": {k: len(v) for k, v in data.history.items()},
             "conditions": data.conditions,
+            "meters": {
+                typ: [{"geraet": m["geraet"], "messwerte": len(m["messwerte"])} for m in meters]
+                for typ, meters in data.meters.items()
+            },
+            "settlements": {
+                kind: {k: v for k, v in st.items() if not isinstance(v, dict)}
+                for kind, st in data.settlements.items()
+            },
+            "unread_messages": data.unread_messages,
+            "notifications": data.notifications,
+            "open_damages": None if data.open_damages is None else len(data.open_damages),
         },
         TO_REDACT,
     )
