@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Sign in with your Vivawest customer portal account.",
+        "data": {
+          "email": "[%key:common::config_flow::data::email%]",
+          "password": "[%key:common::config_flow::data::password%]"
+        }
+      },
+      "reauth_confirm": {
+        "title": "[%key:common::config_flow::title::reauth%]",
+        "description": "The password for {email} is no longer valid. Please enter the current password.",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "wrong_account": "The credentials belong to a different Vivawest account."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "kaltwasser": { "name": "Cold water" },
+      "warmwasser": { "name": "Hot water" },
+      "warmwasser_energie": { "name": "Hot water energy" },
+      "heizenergie": { "name": "Heating energy" },
+      "heizung_verbrauchseinheiten": { "name": "Heating consumption units" },
+      "miete_gesamt": { "name": "Total rent" },
+      "grundmiete": { "name": "Base rent" },
+      "vorauszahlung_betriebskosten": { "name": "Operating costs prepayment" },
+      "vorauszahlung_heizkosten": { "name": "Heating costs prepayment" }
+    }
+  }
+}

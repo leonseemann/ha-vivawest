@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Sign in with your Vivawest customer portal account.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate integration",
+        "description": "The password for {email} is no longer valid. Please enter the current password.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication",
+      "cannot_connect": "Failed to connect",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Account is already configured",
+      "reauth_successful": "Re-authentication was successful",
+      "wrong_account": "The credentials belong to a different Vivawest account."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "kaltwasser": {
+        "name": "Cold water"
+      },
+      "warmwasser": {
+        "name": "Hot water"
+      },
+      "warmwasser_energie": {
+        "name": "Hot water energy"
+      },
+      "heizenergie": {
+        "name": "Heating energy"
+      },
+      "heizung_verbrauchseinheiten": {
+        "name": "Heating consumption units"
+      },
+      "miete_gesamt": {
+        "name": "Total rent"
+      },
+      "grundmiete": {
+        "name": "Base rent"
+      },
+      "vorauszahlung_betriebskosten": {
+        "name": "Operating costs prepayment"
+      },
+      "vorauszahlung_heizkosten": {
+        "name": "Heating costs prepayment"
+      }
+    }
+  }
+}

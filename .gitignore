@@ -2,3 +2,5 @@
 # Lokaler Statistik-Status (Entwicklung)
 state.json
 __pycache__/
+.pytest_cache/
+.venv/

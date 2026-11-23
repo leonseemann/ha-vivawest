@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Melde dich mit deinem Konto des Vivawest Kundenportals an.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Integration erneut authentifizieren",
+        "description": "Das Passwort für {email} ist nicht mehr gültig. Bitte gib das aktuelle Passwort ein.",
+        "data": {
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-Mail oder Passwort ist falsch.",
+      "cannot_connect": "Verbindung zum Kundenportal fehlgeschlagen.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "abort": {
+      "already_configured": "Dieses Konto ist bereits eingerichtet.",
+      "reauth_successful": "Erneute Anmeldung erfolgreich.",
+      "wrong_account": "Die Zugangsdaten gehören zu einem anderen Vivawest-Konto."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "kaltwasser": {
+        "name": "Kaltwasser"
+      },
+      "warmwasser": {
+        "name": "Warmwasser"
+      },
+      "warmwasser_energie": {
+        "name": "Warmwasser Energie"
+      },
+      "heizenergie": {
+        "name": "Heizenergie"
+      },
+      "heizung_verbrauchseinheiten": {
+        "name": "Heizung Verbrauchseinheiten"
+      },
+      "miete_gesamt": {
+        "name": "Miete gesamt"
+      },
+      "grundmiete": {
+        "name": "Grundmiete"
+      },
+      "vorauszahlung_betriebskosten": {
+        "name": "Vorauszahlung Betriebskosten"
+      },
+      "vorauszahlung_heizkosten": {
+        "name": "Vorauszahlung Heizkosten"
+      }
+    }
+  }
+}
