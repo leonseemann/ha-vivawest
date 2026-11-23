@@ -1,6 +1,6 @@
 name: "Vivawest"
-description: "Liest Heizungs- und Wasserverbräuche aus dem Vivawest Kundenportal und stellt sie als Sensoren und Langzeitstatistik bereit."
-version: "1.1.0"
+description: "Liest Heizungs- und Wasserverbräuche sowie Miete und Vorauszahlungen aus dem Vivawest Kundenportal und stellt sie in Home Assistant bereit."
+version: "1.2.0"
 slug: "vivawest"
 init: false
 homeassistant_api: true

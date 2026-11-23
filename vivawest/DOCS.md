@@ -8,6 +8,8 @@ Home Assistant bereit:
 - als **Langzeitstatistik** für das Energie-Dashboard. Jeder Monatsverbrauch wird
   rückwirkend gleichmäßig auf den jeweiligen Monat verteilt.
 
+Außerdem zeigt es die aktuelle **Miete und die Vorauszahlungen** samt geplanten Änderungen.
+
 ## Voraussetzungen
 
 - Ein Konto im Vivawest Kundenportal mit freigeschalteter Verbrauchsinformation (UVI).
@@ -52,6 +54,23 @@ des **letzten abgerechneten Monats**:
 
 Attribute: `ablesedatum`, `monat`, `jahr` und, falls vorhanden,
 `vergleich_liegenschaft_prozent` (Abweichung vom Durchschnitt des Hauses pro m²).
+
+### Miete und Vorauszahlungen
+
+| Sensor | Einheit | Beschreibung |
+|---|---|---|
+| Vivawest Miete gesamt | EUR | Monatlicher Gesamtbetrag |
+| Vivawest Grundmiete | EUR | Grundmiete |
+| Vivawest Vorauszahlung Betriebskosten | EUR | Monatliche Betriebskosten-Vorauszahlung |
+| Vivawest Vorauszahlung Heizkosten | EUR | Monatliche Heizkosten-Vorauszahlung |
+
+Attribute: `gueltig_von`, `gueltig_bis` und, wenn bereits eine Änderung geplant ist,
+`naechster_betrag` und `naechste_aenderung`. „Miete gesamt“ listet zusätzlich alle
+Positionen unter `positionen` auf (z. B. TV-Versorgung).
+
+Kosten pro m³ oder kWh stellt das Portal nicht bereit. Für die Kostenberechnung im
+Energie-Dashboard trägst du dort einen festen Preis pro Einheit ein (z. B. aus deiner
+letzten Heiz- bzw. Wasserkostenabrechnung).
 
 ## Energie-Dashboard
 

@@ -59,6 +59,8 @@ Web-Frontend (`kundenportal.vivawest.de/assets/*.js`), es gibt keine offizielle 
 | `login` | POST `{"email", "password"}` | Antwort enthält `sessionId`, `expireDate`, Vertragsdaten |
 | `uvi/current` | GET | Letzter Monatswert je Verbrauchsart + `types` |
 | `uvi/current/<typ>` | GET | Monatsverlauf (ca. 10–12 Monate) + Werte pro Einzelzähler |
+| `contracts/conditions` | GET | Mietkonditionen als Zeiträume (vergangen/aktuell/zukünftig) |
+| `additional-costs/settlements`, `additional-costs/details/<Ident>` | GET | Nebenkostenabrechnungen (derzeit nicht genutzt) |
 | `logout` | PUT | Session beenden |
 
 - Authentifizierung: Header `X-Session-Id: <sessionId>` (Cookies sind nicht nötig).
@@ -76,6 +78,12 @@ Monatseintrag (aus `uvi/current` → `messwerte.<typ>` bzw. `uvi/current/<typ>` 
 - `verbrauchswert` = **Verbrauch des Monats** (Summe aller Zähler), kein Zählerstand.
   Kalt-/Warmwasser in m³, Heizung in Verbrauchseinheiten (VE, `heizenergieEinheit`).
 - `kwh` = Energie (Warmwasser, Heizung). Bei Heizung ein vom Portal umgerechneter Wert.
+- `contracts/conditions`: Liste von Zeiträumen `{Gueltig, GueltigVon, GueltigBis, GrossAmountdec,
+  ConditionItems.results[{Condtype, Xcondtypel, GrossAmountdec}]}`. Bekannte `Condtype`:
+  `1000` Grundmiete, `3760` TV-Versorgung, `4000` VZ Betriebskosten, `4010` VZ Heizkosten.
+  Enthält auch `Recnnr` (Vertragsnummer) – nicht loggen.
+- Preise pro m³/kWh liefert das Portal nicht; Heiz-/Wasserkostenabrechnungen sind
+  (Stand 11/2026) noch nicht vorhanden.
 - Die Antworten enthalten unter `contract` umfangreiche **persönliche Daten** –
   `get_current()` verwirft sie. Nie loggen oder persistieren.
 
@@ -90,6 +98,12 @@ Monatseintrag (aus `uvi/current` → `messwerte.<typ>` bzw. `uvi/current/<typ>` 
 Definiert in `SENSORS` (`main.py`): `kaltwasser_verbrauch`, `warmwasser_verbrauch`,
 `warmwasser_kwh`, `heizenergie_kwh`, `heizenergie_ve`. Gerät: `vivawest_addon`.
 **`sensor_id`s nicht umbenennen** (Teil der `unique_id`).
+
+Mietkonditionen: `COST_SENSORS` (`miete_gesamt`, `grundmiete`, `vorauszahlung_betriebskosten`,
+`vorauszahlung_heizkosten`; `field` = `Condtype` bzw. `gesamt`). `process_conditions()` wählt
+den aktuellen Zeitraum (`Gueltig`, sonst per Datum) und setzt `naechster_betrag` /
+`naechste_aenderung` aus dem ersten zukünftigen Zeitraum mit abweichendem Betrag.
+Ein Fehler beim Abruf der Konditionen wird nur als Warnung geloggt.
 
 Die Sensoren haben bewusst **keine `state_class`**: Sie zeigen den Verbrauch des letzten
 Monats, keinen Zählerstand. Für Verläufe ist die Langzeitstatistik zuständig.
@@ -119,7 +133,7 @@ Monats, keinen Zählerstand. Für Verläufe ist die Langzeitstatistik zuständig
 - Abhängigkeiten in `requirements.txt` exakt pinnen (`==`).
 - Neue Optionen an **drei** Stellen: `config.yaml` (`options` **und** `schema`) und
   Env-Fallback in `load_config()`. Danach `DOCS.md` aktualisieren.
-- Neuer Sensor: Eintrag in `SENSORS`. Neue Statistik: Eintrag in `STATISTICS`.
+- Neuer Verbrauchssensor: Eintrag in `SENSORS`; neuer Kostensensor: `COST_SENSORS`. Neue Statistik: `STATISTICS`.
 
 ## Release / Versionierung
 

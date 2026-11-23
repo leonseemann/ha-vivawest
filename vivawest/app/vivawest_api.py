@@ -95,6 +95,17 @@ class VivawestClient:
         return data.get("messwerte") or []
 
 
+    # -- Miete / Vorauszahlungen ------------------------------------------------
+    def get_conditions(self) -> list[dict]:
+        """Mietkonditionen als Zeiträume (vergangen, aktuell, zukünftig).
+
+        Jeder Zeitraum: {"Gueltig": bool, "GueltigVon", "GueltigBis", "GrossAmountdec",
+        "ConditionItems": {"results": [{"Condtype", "Xcondtypel", "GrossAmountdec", ...}]}}
+        """
+        data = self._request("GET", "contracts/conditions") or []
+        return data if isinstance(data, list) else []
+
+
 def month_values(history: list[dict], field: str) -> dict[tuple[int, int], float]:
     """Wandelt eine Historie in {(jahr, monat): wert} um; fehlende Werte werden ausgelassen."""
     result: dict[tuple[int, int], float] = {}

@@ -14,6 +14,7 @@ import signal
 import sys
 import time
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 import paho.mqtt.client as mqtt
@@ -50,8 +51,8 @@ class SensorDef:
     sensor_id: str               # Teil der unique_id – nicht umbenennen!
     name: str
     unit: str
-    uvi_type: str                # Verbrauchsart der API
-    field: str                   # Feld im Messwert
+    source: str                  # Verbrauchsart der API bzw. "kosten"
+    field: str                   # Feld im Messwert bzw. Konditionsart
     device_class: Optional[str]
     icon: str
 
@@ -67,6 +68,19 @@ SENSORS = [
               "heizenergie", "kwh", "energy", "mdi:radiator"),
     SensorDef("heizenergie_ve", "Vivawest Heizung Verbrauchseinheiten", "VE",
               "heizenergie", "verbrauchswert", None, "mdi:radiator"),
+]
+
+# Mietkonditionen (Monatsbeträge). field = Konditionsart (Condtype) des Portals,
+# "gesamt" = Summe aller Positionen.
+COST_SENSORS = [
+    SensorDef("miete_gesamt", "Vivawest Miete gesamt", "EUR",
+              "kosten", "gesamt", "monetary", "mdi:home-currency-eur"),
+    SensorDef("grundmiete", "Vivawest Grundmiete", "EUR",
+              "kosten", "1000", "monetary", "mdi:home-currency-eur"),
+    SensorDef("vorauszahlung_betriebskosten", "Vivawest Vorauszahlung Betriebskosten", "EUR",
+              "kosten", "4000", "monetary", "mdi:cash-multiple"),
+    SensorDef("vorauszahlung_heizkosten", "Vivawest Vorauszahlung Heizkosten", "EUR",
+              "kosten", "4010", "monetary", "mdi:radiator"),
 ]
 
 
@@ -137,7 +151,7 @@ def publish_discovery(client: mqtt.Client, sensor: SensorDef) -> None:
 
 
 def register_sensors(client: mqtt.Client) -> None:
-    for sensor in SENSORS:
+    for sensor in SENSORS + COST_SENSORS:
         publish_discovery(client, sensor)
 
 
@@ -155,7 +169,7 @@ def process_and_publish(client: mqtt.Client, current: dict) -> None:
         return
 
     for sensor in SENSORS:
-        entry = messwerte.get(sensor.uvi_type)
+        entry = messwerte.get(sensor.source)
         if not entry or entry.get(sensor.field) is None:
             log.debug("Keine Daten für %s.", sensor.sensor_id)
             continue
@@ -167,6 +181,72 @@ def process_and_publish(client: mqtt.Client, current: dict) -> None:
         if isinstance(entry.get("differenz_liegenschaft_qm_prozent"), (int, float)):
             attributes["vergleich_liegenschaft_prozent"] = round(entry["differenz_liegenschaft_qm_prozent"], 1)
         publish_state(client, sensor.sensor_id, entry[sensor.field], attributes)
+
+
+def _amount(value) -> float:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _period_amounts(period: dict) -> dict[str, float]:
+    """{Konditionsart: Betrag} eines Zeitraums, plus "gesamt"."""
+    amounts = {"gesamt": _amount(period.get("GrossAmountdec"))}
+    for item in (period.get("ConditionItems") or {}).get("results") or []:
+        if item.get("Condtype"):
+            amounts[item["Condtype"]] = _amount(item.get("GrossAmountdec"))
+    return amounts
+
+
+def _period_items(period: dict) -> dict[str, float]:
+    """{Bezeichnung: Betrag} aller Positionen eines Zeitraums."""
+    return {
+        item.get("Xcondtypel") or item.get("Condtype"): _amount(item.get("GrossAmountdec"))
+        for item in (period.get("ConditionItems") or {}).get("results") or []
+    }
+
+
+def select_periods(periods: list[dict], today: date) -> tuple[Optional[dict], list[dict]]:
+    """Liefert den aktuell gültigen Zeitraum und die zukünftigen (aufsteigend)."""
+    ordered = sorted(periods, key=lambda p: p.get("GueltigVon") or "")
+    today_s = today.isoformat()
+    current = next((p for p in ordered if p.get("Gueltig")), None)
+    if current is None:
+        current = next((p for p in reversed(ordered)
+                        if (p.get("GueltigVon") or "") <= today_s <= (p.get("GueltigBis") or "9999")), None)
+    if current is None:
+        return None, []
+    future = [p for p in ordered if (p.get("GueltigVon") or "") > (current.get("GueltigVon") or "")]
+    return current, future
+
+
+def process_conditions(client: mqtt.Client, periods: list[dict], today: Optional[date] = None) -> None:
+    """Veröffentlicht die aktuellen Monatsbeträge samt nächster geplanter Änderung."""
+    current, future = select_periods(periods, today or date.today())
+    if current is None:
+        log.warning("Keine gültigen Mietkonditionen gefunden.")
+        return
+
+    now = _period_amounts(current)
+    for sensor in COST_SENSORS:
+        if sensor.field not in now:
+            log.debug("Keine Kondition %s vorhanden.", sensor.field)
+            continue
+        attributes = {
+            "gueltig_von": current.get("GueltigVon"),
+            "gueltig_bis": current.get("GueltigBis"),
+        }
+        if sensor.field == "gesamt":
+            attributes["positionen"] = _period_items(current)
+        # Erste zukünftige Änderung dieses Betrags (fehlende Position = 0 €)
+        for period in future:
+            amount = _period_amounts(period).get(sensor.field, 0.0)
+            if amount != now[sensor.field]:
+                attributes["naechster_betrag"] = amount
+                attributes["naechste_aenderung"] = period.get("GueltigVon")
+                break
+        publish_state(client, sensor.sensor_id, now[sensor.field], attributes)
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +294,15 @@ def run_cycle(mqtt_client: mqtt.Client, cfg: dict) -> None:
         if cfg.get("import_statistics", True):
             for uvi_type in current.get("types") or []:
                 histories[uvi_type] = api.get_history(uvi_type)
+        try:
+            conditions = api.get_conditions()
+        except (VivawestError, requests.RequestException) as e:
+            log.warning("Mietkonditionen nicht abrufbar: %s", e)
+            conditions = []
 
     process_and_publish(mqtt_client, current)
+    if conditions:
+        process_conditions(mqtt_client, conditions)
 
     if histories:
         try:
