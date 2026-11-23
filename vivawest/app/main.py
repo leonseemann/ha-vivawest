@@ -1,7 +1,9 @@
 """
 Vivawest Home Assistant Add-on
-Liest Kaltwasser- und Warmwasser-Messwerte und veröffentlicht sie
-als HA-Sensoren via MQTT Discovery.
+Liest Heizungs-, Kaltwasser- und Warmwasser-Verbräuche aus dem Vivawest
+Kundenportal, veröffentlicht den letzten Monatswert als HA-Sensoren via
+MQTT Discovery und importiert die Monatsverbräuche – gleichmäßig auf die
+Stunden des jeweiligen Monats verteilt – rückwirkend in die Langzeitstatistik.
 """
 from __future__ import annotations
 
@@ -11,10 +13,14 @@ import os
 import signal
 import sys
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 import paho.mqtt.client as mqtt
 import requests
+
+from ha_statistics import import_all
+from vivawest_api import VivawestClient, VivawestError
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -28,14 +34,40 @@ log = logging.getLogger("vivawest")
 # ---------------------------------------------------------------------------
 # Konstanten
 # ---------------------------------------------------------------------------
-VIVAWEST_BASE = "https://api.kundenportal.vivawest.de"
-VIVAWEST_BEARER = "7d2e1b552a69092edff3b2212c5985e051a7e934"
 MQTT_DISCOVERY_PREFIX = "homeassistant"
 MQTT_AVAILABILITY_TOPIC = "vivawest/availability"
 MIN_INTERVAL_HOURS = 1
 REQUEST_TIMEOUT = 15
 MQTT_CONNECT_RETRIES = 5
 MQTT_CONNECT_RETRY_DELAY = 10
+STATE_FILE = os.environ.get(
+    "STATE_FILE", "/data/state.json" if os.path.isdir("/data") else "state.json"
+)
+
+
+@dataclass(frozen=True)
+class SensorDef:
+    sensor_id: str               # Teil der unique_id – nicht umbenennen!
+    name: str
+    unit: str
+    uvi_type: str                # Verbrauchsart der API
+    field: str                   # Feld im Messwert
+    device_class: Optional[str]
+    icon: str
+
+
+SENSORS = [
+    SensorDef("kaltwasser_verbrauch", "Vivawest Kaltwasser Verbrauch", "m³",
+              "kaltwasser", "verbrauchswert", "water", "mdi:water"),
+    SensorDef("warmwasser_verbrauch", "Vivawest Warmwasser Verbrauch", "m³",
+              "warmwasser", "verbrauchswert", "water", "mdi:water-thermometer"),
+    SensorDef("warmwasser_kwh", "Vivawest Warmwasser Energie", "kWh",
+              "warmwasser", "kwh", "energy", "mdi:lightning-bolt"),
+    SensorDef("heizenergie_kwh", "Vivawest Heizenergie", "kWh",
+              "heizenergie", "kwh", "energy", "mdi:radiator"),
+    SensorDef("heizenergie_ve", "Vivawest Heizung Verbrauchseinheiten", "VE",
+              "heizenergie", "verbrauchswert", None, "mdi:radiator"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +85,7 @@ def load_config() -> dict:
             "mqtt_user": os.environ.get("MQTT_USER", ""),
             "mqtt_password": os.environ.get("MQTT_PASSWORD", ""),
             "poll_interval_hours": int(os.environ.get("POLL_INTERVAL_HOURS", "1")),
+            "import_statistics": os.environ.get("IMPORT_STATISTICS", "true").lower() == "true",
         }
     with open(options_path) as f:
         return json.load(f)
@@ -71,60 +104,23 @@ def get_poll_interval(cfg: dict) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Vivawest API
-# ---------------------------------------------------------------------------
-def get_session_token(login: str, password: str) -> str:
-    """Gibt den sessionToken zurück oder wirft eine Exception."""
-    log.info("Hole Session-Token...")
-    resp = requests.post(
-        f"{VIVAWEST_BASE}/api/login",
-        headers={
-            "Accept": "*/*",
-            "Authorization": f"Bearer {VIVAWEST_BEARER}",
-            "Content-Type": "application/json",
-        },
-        json={"email": login, "password": password, "v2": True},
-        timeout=REQUEST_TIMEOUT,
-    )
-    resp.raise_for_status()
-    token = resp.json().get("sessionToken")
-    if not token:
-        raise ValueError("sessionToken fehlt in der Login-Antwort")
-    log.info("Session-Token erhalten.")
-    return token
-
-
-def get_uvi_current(session_token: str) -> dict:
-    """Ruft /api/uvi/current ab und gibt das JSON-Dict zurück."""
-    log.info("Rufe UVI-Daten ab...")
-    resp = requests.get(
-        f"{VIVAWEST_BASE}/api/uvi/current",
-        headers={
-            "Authorization": f"Bearer {VIVAWEST_BEARER}",
-            "x-session-token": session_token,
-        },
-        timeout=REQUEST_TIMEOUT,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-# ---------------------------------------------------------------------------
 # MQTT Helpers
 # ---------------------------------------------------------------------------
-def publish_discovery(client: mqtt.Client, sensor_id: str, name: str,
-                      unit: str, device_class: Optional[str] = None,
-                      state_class: Optional[str] = None,
-                      icon: Optional[str] = None) -> None:
-    topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/vivawest_{sensor_id}/config"
+def state_topic(sensor_id: str) -> str:
+    return f"vivawest/sensor/{sensor_id}/state"
+
+
+def publish_discovery(client: mqtt.Client, sensor: SensorDef) -> None:
+    topic = f"{MQTT_DISCOVERY_PREFIX}/sensor/vivawest_{sensor.sensor_id}/config"
     payload = {
-        "name": name,
-        "unique_id": f"vivawest_{sensor_id}",
-        "state_topic": f"vivawest/sensor/{sensor_id}/state",
-        "unit_of_measurement": unit,
+        "name": sensor.name,
+        "unique_id": f"vivawest_{sensor.sensor_id}",
+        "state_topic": state_topic(sensor.sensor_id),
+        "unit_of_measurement": sensor.unit,
         "value_template": "{{ value_json.value }}",
-        "json_attributes_topic": f"vivawest/sensor/{sensor_id}/state",
+        "json_attributes_topic": state_topic(sensor.sensor_id),
         "availability_topic": MQTT_AVAILABILITY_TOPIC,
+        "icon": sensor.icon,
         "device": {
             "identifiers": ["vivawest_addon"],
             "name": "Vivawest",
@@ -132,74 +128,45 @@ def publish_discovery(client: mqtt.Client, sensor_id: str, name: str,
             "manufacturer": "Vivawest",
         },
     }
-    if device_class:
-        payload["device_class"] = device_class
-    if state_class:
-        payload["state_class"] = state_class
-    if icon:
-        payload["icon"] = icon
+    # Bewusst ohne state_class: Der Wert ist der Verbrauch des letzten Monats,
+    # kein Zählerstand. Die Langzeitstatistik kommt aus dem Statistik-Import.
+    if sensor.device_class:
+        payload["device_class"] = sensor.device_class
     client.publish(topic, json.dumps(payload), retain=True)
-    log.info("Discovery gesendet: %s", name)
-
-
-def publish_state(client: mqtt.Client, sensor_id: str, value, attributes: dict) -> None:
-    topic = f"vivawest/sensor/{sensor_id}/state"
-    payload = {"value": value, **attributes}
-    client.publish(topic, json.dumps(payload), retain=True)
-    log.info("State veröffentlicht: %s = %s", sensor_id, value)
-
-
-# ---------------------------------------------------------------------------
-# Daten verarbeiten und veröffentlichen
-# ---------------------------------------------------------------------------
-def process_and_publish(client: mqtt.Client, uvi_data: dict) -> None:
-    messwerte = uvi_data.get("messwerte", {})
-    if not messwerte:
-        log.warning("Keine 'messwerte' in der API-Antwort. Rohdaten: %s", uvi_data)
-        return
-
-    kw = messwerte.get("kaltwasser")
-    if kw:
-        publish_state(client, "kaltwasser_verbrauch", kw.get("verbrauchswert"), {
-            "ablesedatum": kw.get("ablesedatum"),
-            "monat": kw.get("monat"),
-            "jahr": kw.get("jahr"),
-        })
-    else:
-        log.warning("Keine Kaltwasser-Daten in der Antwort.")
-
-    ww = messwerte.get("warmwasser")
-    if ww:
-        publish_state(client, "warmwasser_verbrauch", ww.get("verbrauchswert"), {
-            "ablesedatum": ww.get("ablesedatum"),
-            "monat": ww.get("monat"),
-            "jahr": ww.get("jahr"),
-        })
-        publish_state(client, "warmwasser_kwh", ww.get("kwh"), {
-            "ablesedatum": ww.get("ablesedatum"),
-            "monat": ww.get("monat"),
-            "jahr": ww.get("jahr"),
-        })
-    else:
-        log.warning("Keine Warmwasser-Daten in der Antwort.")
+    log.info("Discovery gesendet: %s", sensor.name)
 
 
 def register_sensors(client: mqtt.Client) -> None:
-    publish_discovery(client, "kaltwasser_verbrauch",
-                      name="Vivawest Kaltwasser Verbrauch",
-                      unit="m³", device_class="water",
-                      state_class="total_increasing",
-                      icon="mdi:water")
-    publish_discovery(client, "warmwasser_verbrauch",
-                      name="Vivawest Warmwasser Verbrauch",
-                      unit="m³", device_class="water",
-                      state_class="total_increasing",
-                      icon="mdi:water-thermometer")
-    publish_discovery(client, "warmwasser_kwh",
-                      name="Vivawest Warmwasser Energie",
-                      unit="kWh", device_class="energy",
-                      state_class="total_increasing",
-                      icon="mdi:lightning-bolt")
+    for sensor in SENSORS:
+        publish_discovery(client, sensor)
+
+
+def publish_state(client: mqtt.Client, sensor_id: str, value, attributes: dict) -> None:
+    payload = {"value": value, **attributes}
+    client.publish(state_topic(sensor_id), json.dumps(payload), retain=True)
+    log.info("State veröffentlicht: %s = %s", sensor_id, value)
+
+
+def process_and_publish(client: mqtt.Client, current: dict) -> None:
+    """Veröffentlicht den letzten Monatswert jeder Verbrauchsart."""
+    messwerte = current.get("messwerte") or {}
+    if not messwerte:
+        log.warning("Keine 'messwerte' in der API-Antwort (Felder: %s).", sorted(current))
+        return
+
+    for sensor in SENSORS:
+        entry = messwerte.get(sensor.uvi_type)
+        if not entry or entry.get(sensor.field) is None:
+            log.debug("Keine Daten für %s.", sensor.sensor_id)
+            continue
+        attributes = {
+            "ablesedatum": entry.get("ablesedatum"),
+            "monat": entry.get("monat"),
+            "jahr": entry.get("jahr"),
+        }
+        if isinstance(entry.get("differenz_liegenschaft_qm_prozent"), (int, float)):
+            attributes["vergleich_liegenschaft_prozent"] = round(entry["differenz_liegenschaft_qm_prozent"], 1)
+        publish_state(client, sensor.sensor_id, entry[sensor.field], attributes)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +174,7 @@ def register_sensors(client: mqtt.Client) -> None:
 # ---------------------------------------------------------------------------
 def build_mqtt_client(cfg: dict) -> mqtt.Client:
     mqtt_client = mqtt.Client(
-        callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id="vivawest_addon",
     )
 
@@ -217,17 +184,17 @@ def build_mqtt_client(cfg: dict) -> mqtt.Client:
     # Last Will and Testament – HA zeigt "Nicht verfügbar" bei unerwartetem Absturz
     mqtt_client.will_set(MQTT_AVAILABILITY_TOPIC, payload="offline", retain=True)
 
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if not reason_code.is_failure:
             log.info("MQTT verbunden.")
             client.publish(MQTT_AVAILABILITY_TOPIC, "online", retain=True)
         else:
-            log.error("MQTT Verbindung fehlgeschlagen (RC=%d).", rc)
+            log.error("MQTT Verbindung fehlgeschlagen: %s", reason_code)
 
-    def on_disconnect(client, userdata, rc):
-        if rc != 0:
+    def on_disconnect(client, userdata, flags, reason_code, properties):
+        if reason_code.is_failure:
             log.warning(
-                "MQTT unerwartet getrennt (RC=%d) – automatische Wiederverbindung aktiv.", rc
+                "MQTT unerwartet getrennt (%s) – automatische Wiederverbindung aktiv.", reason_code
             )
 
     mqtt_client.on_connect = on_connect
@@ -238,15 +205,32 @@ def build_mqtt_client(cfg: dict) -> mqtt.Client:
 
 
 # ---------------------------------------------------------------------------
+# Abfrage-Zyklus
+# ---------------------------------------------------------------------------
+def run_cycle(mqtt_client: mqtt.Client, cfg: dict) -> None:
+    with VivawestClient(cfg["login"], cfg["password"], timeout=REQUEST_TIMEOUT) as api:
+        current = api.get_current()
+        histories = {}
+        if cfg.get("import_statistics", True):
+            for uvi_type in current.get("types") or []:
+                histories[uvi_type] = api.get_history(uvi_type)
+
+    process_and_publish(mqtt_client, current)
+
+    if histories:
+        try:
+            import_all(histories, STATE_FILE)
+        except Exception as e:
+            log.exception("Statistik-Import fehlgeschlagen: %s", e)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
     cfg = load_config()
 
-    login = cfg["login"]
-    password = cfg["password"]
-
-    if not login or not password:
+    if not cfg.get("login") or not cfg.get("password"):
         log.error("Login und/oder Passwort fehlen in der Konfiguration!")
         raise SystemExit(1)
 
@@ -289,12 +273,10 @@ def main() -> None:
     while True:
         try:
             log.info("=== Starte Abfrage-Zyklus ===")
-            token = get_session_token(login, password)
-            uvi_data = get_uvi_current(token)
-            process_and_publish(mqtt_client, uvi_data)
+            run_cycle(mqtt_client, cfg)
             log.info("Nächste Abfrage in %d Stunde(n).", poll_interval_sec // 3600)
-        except requests.HTTPError as e:
-            log.error("HTTP-Fehler: %s", e)
+        except VivawestError as e:
+            log.error("Vivawest-API-Fehler: %s", e)
         except requests.Timeout:
             log.error("API-Timeout – nächster Versuch nach Wartezeit.")
         except requests.ConnectionError as e:

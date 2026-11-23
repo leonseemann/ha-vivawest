@@ -1,14 +1,18 @@
 # Vivawest Add-on
 
-Dieses Add-on liest deine Wasser-Verbrauchswerte aus dem
+Dieses Add-on liest deine Heizungs- und Wasserverbräuche aus dem
 [Vivawest Kundenportal](https://kundenportal.vivawest.de) und stellt sie in
-Home Assistant als Sensoren bereit.
+Home Assistant bereit:
+
+- als **Sensoren** mit dem Verbrauch des letzten Monats (per MQTT) und
+- als **Langzeitstatistik** für das Energie-Dashboard. Jeder Monatsverbrauch wird
+  rückwirkend gleichmäßig auf den jeweiligen Monat verteilt.
 
 ## Voraussetzungen
 
 - Ein Konto im Vivawest Kundenportal mit freigeschalteter Verbrauchsinformation (UVI).
 - Ein MQTT-Broker, z. B. das offizielle **Mosquitto broker** Add-on.
-- Die **MQTT-Integration** in Home Assistant (wird bei Mosquitto meist automatisch erkannt).
+- Die **MQTT-Integration** in Home Assistant.
 
 ## Installation
 
@@ -27,45 +31,67 @@ Home Assistant als Sensoren bereit.
 | `mqtt_port` | Port des MQTT-Brokers | `1883` |
 | `mqtt_user` | MQTT-Benutzername (leer = ohne Anmeldung) | leer |
 | `mqtt_password` | MQTT-Passwort | leer |
-| `poll_interval_hours` | Abfrageintervall in Stunden (Minimum 1) | `1` |
+| `poll_interval_hours` | Abfrageintervall in Stunden (Minimum 1) | `12` |
+| `import_statistics` | Monatsverbräuche in die Langzeitstatistik importieren | `true` |
 
-Beispiel:
-
-```yaml
-login: mail@example.com
-password: geheim
-mqtt_host: core-mosquitto
-mqtt_port: 1883
-mqtt_user: mqtt
-mqtt_password: geheim
-poll_interval_hours: 6
-```
-
-> Tipp: Die Werte im Portal werden in der Regel nur monatlich aktualisiert –
-> ein Intervall von mehreren Stunden reicht völlig aus.
+> Vivawest aktualisiert die Werte nur einmal im Monat (meist in den ersten Tagen des
+> Folgemonats). Ein Intervall von 12 Stunden reicht völlig aus.
 
 ## Sensoren
 
-Alle Sensoren erscheinen unter dem Gerät **Vivawest**:
+Alle Sensoren erscheinen unter dem Gerät **Vivawest** und zeigen den Verbrauch
+des **letzten abgerechneten Monats**:
 
-| Entität | Einheit | Beschreibung |
+| Sensor | Einheit | Beschreibung |
 |---|---|---|
-| `sensor.vivawest_kaltwasser_verbrauch` | m³ | Kaltwasserverbrauch |
-| `sensor.vivawest_warmwasser_verbrauch` | m³ | Warmwasserverbrauch |
-| `sensor.vivawest_warmwasser_energie` | kWh | Energie für Warmwasser |
+| Vivawest Kaltwasser Verbrauch | m³ | Kaltwasser |
+| Vivawest Warmwasser Verbrauch | m³ | Warmwasser |
+| Vivawest Warmwasser Energie | kWh | Energie für Warmwasser |
+| Vivawest Heizenergie | kWh | Heizenergie (vom Portal umgerechnet) |
+| Vivawest Heizung Verbrauchseinheiten | VE | Heizung, Rohwert der Heizkostenverteiler |
 
-Jeder Sensor hat die Attribute `ablesedatum`, `monat` und `jahr`.
-Die Sensoren haben `state_class: total_increasing` und können im
-**Energie-Dashboard** (Wasser bzw. Energie) verwendet werden.
+Attribute: `ablesedatum`, `monat`, `jahr` und, falls vorhanden,
+`vergleich_liegenschaft_prozent` (Abweichung vom Durchschnitt des Hauses pro m²).
 
-Ist das Add-on gestoppt oder abgestürzt, werden die Sensoren als
-„Nicht verfügbar" angezeigt.
+## Energie-Dashboard
+
+Das Add-on legt diese Statistiken an:
+
+| Statistik | Einheit | Im Energie-Dashboard unter |
+|---|---|---|
+| `vivawest:kaltwasser` | m³ | Wasserverbrauch |
+| `vivawest:warmwasser` | m³ | Wasserverbrauch |
+| `vivawest:heizenergie` | kWh | z. B. Einzelgeräte oder Netzverbrauch |
+| `vivawest:warmwasser_energie` | kWh | z. B. Einzelgeräte |
+
+Einrichten unter **Einstellungen → Dashboards → Energie**. Die Statistiken erscheinen dort
+in der Auswahl als „Vivawest Kaltwasser“ usw.
+
+Jeder Monatsverbrauch wird gleichmäßig auf alle Stunden des Monats verteilt. Tages- und
+Wochenwerte sind daher Durchschnittswerte, die Monatssummen stimmen genau. Beim ersten
+Start werden alle Monate importiert, die das Portal liefert (ca. 10–12 Monate,
+bei der Heizung weniger). Neue Monate kommen automatisch dazu, sobald Vivawest sie
+veröffentlicht.
+
+Der Importstatus liegt in `/data/state.json` des Add-ons. Wird das Add-on deinstalliert
+und neu installiert, beginnt die Zählung von vorn.
 
 ## Fehlerbehebung
 
 Im Tab **Protokoll** des Add-ons:
 
-- `Login und/oder Passwort fehlen` – Zugangsdaten in der Konfiguration eintragen.
-- `HTTP-Fehler: 401 …` – Zugangsdaten im Kundenportal prüfen.
-- `MQTT-Verbindung fehlgeschlagen` – läuft der Broker? Stimmen Host, Port, Benutzer und Passwort?
-- `Keine 'messwerte' in der API-Antwort` – für das Konto liegen (noch) keine Verbrauchswerte vor.
+- `Login und/oder Passwort fehlen`: Zugangsdaten in der Konfiguration eintragen.
+- `Vivawest-API-Fehler: POST login → HTTP 403`: E-Mail oder Passwort falsch.
+- `Vivawest-API-Fehler: … HTTP 404`: Vivawest hat die API geändert, bitte ein Issue eröffnen.
+- `MQTT-Verbindung fehlgeschlagen`: Läuft der Broker? Stimmen Host, Port, Benutzer und Passwort?
+- `Statistik-Import fehlgeschlagen`: Die Meldung danach nennt den Grund. Die Sensoren
+  werden trotzdem aktualisiert.
+- `Keine 'messwerte' in der API-Antwort`: Für das Konto liegen (noch) keine Verbrauchswerte vor.
+
+### Upgrade von Version 1.0.x
+
+Die alten Sensoren hatten `state_class: total_increasing`. Weil sie Monatswerte und keine
+Zählerstände zeigen, entstanden dabei falsche Statistiken. Home Assistant meldet nach dem
+Update evtl. unter **Entwicklerwerkzeuge → Statistiken** ein Problem für diese Sensoren.
+Dort „Beheben“ bzw. die alten Statistiken löschen und im Energie-Dashboard auf die neuen
+`vivawest:…`-Statistiken umstellen.

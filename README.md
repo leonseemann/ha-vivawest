@@ -1,8 +1,10 @@
 # Vivawest Home Assistant Add-on
 
-Home-Assistant-Add-on-Repository, das Wasser-Verbrauchswerte (Kaltwasser,
-Warmwasser, Warmwasser-Energie) aus dem Vivawest Kundenportal ausliest und per
-MQTT Discovery als Sensoren in Home Assistant bereitstellt.
+Home-Assistant-Add-on-Repository, das Heizungs- und Wasserverbräuche
+(Heizenergie, Kaltwasser, Warmwasser) aus dem Vivawest Kundenportal ausliest. Die
+Werte erscheinen als MQTT-Sensoren und als Langzeitstatistik für das
+Energie-Dashboard. Die Monatswerte werden dabei rückwirkend auf den jeweiligen
+Monat verteilt.
 
 [![Repository hinzufügen](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fleonseemann%2Fha-vivawest)
 

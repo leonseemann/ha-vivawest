@@ -1,8 +1,9 @@
 name: "Vivawest"
-description: "Liest Wasser-Messwerte aus dem Vivawest Kundenportal und stellt sie als HA-Sensoren bereit."
-version: "1.0.8"
+description: "Liest Heizungs- und Wasserverbräuche aus dem Vivawest Kundenportal und stellt sie als Sensoren und Langzeitstatistik bereit."
+version: "1.1.0"
 slug: "vivawest"
 init: false
+homeassistant_api: true
 
 arch:
   - aarch64
@@ -16,7 +17,8 @@ options:
   mqtt_port: 1883
   mqtt_user: ""
   mqtt_password: ""
-  poll_interval_hours: 1
+  poll_interval_hours: 12
+  import_statistics: true
 
 schema:
   login: str
@@ -26,3 +28,4 @@ schema:
   mqtt_user: str
   mqtt_password: password
   poll_interval_hours: int
+  import_statistics: bool
