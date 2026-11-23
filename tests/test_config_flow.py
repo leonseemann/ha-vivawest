@@ -78,3 +78,24 @@ async def test_reauth_wrong_account(hass: HomeAssistant, mock_client) -> None:
     result = await entry.start_reauth_flow(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_PASSWORD: "neu"})
     assert result["reason"] == "wrong_account"
+
+
+async def test_options_flow(hass: HomeAssistant, mock_client) -> None:
+    from unittest.mock import patch
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=PARTNER_ID, title=EMAIL,
+                            data={CONF_EMAIL: EMAIL, CONF_PASSWORD: PASSWORD})
+    entry.add_to_hass(hass)
+    with patch("custom_components.vivawest.coordinator.async_import_statistics") as imp:
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        assert result["type"] is FlowResultType.FORM
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"preis_wasser": 5.72, "preis_heizenergie": 0})
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {"preis_wasser": 5.72}  # 0/leer = kein Preis
+    # Neu geladen → Import mit den neuen Preisen
+    assert imp.call_args.args[2] == {"preis_wasser": 5.72}

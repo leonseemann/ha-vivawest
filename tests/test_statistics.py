@@ -83,3 +83,21 @@ async def test_import_roundtrip(recorder_mock: Recorder, hass: HomeAssistant) ->
     await async_wait_recording_done(hass)
     assert await _monthly(hass, "vivawest:kaltwasser") == {
         8: (3.4, 3.4), 9: (2.0, 5.4), 10: (3.5, 8.9), 11: (4.0, 12.9)}
+
+
+async def test_cost_statistics(recorder_mock: Recorder, hass: HomeAssistant) -> None:
+    await hass.config.async_update(time_zone="Europe/Berlin")
+    data = make_data()
+    prices = {"preis_wasser": 5.72, "preis_heizenergie": 0.12}
+
+    await async_import_statistics(hass, data.history, prices)
+    await async_wait_recording_done(hass)
+    assert await _monthly(hass, "vivawest:kaltwasser_kosten") == {
+        8: (19.448, 19.448), 9: (9.152, 28.6), 10: (20.02, 48.62)}
+    assert (await _monthly(hass, "vivawest:heizenergie_kosten"))[10] == (9.84, 9.84)
+    assert await _monthly(hass, "vivawest:warmwasser_energie_kosten") == {}  # kein Preis
+
+    # Preisänderung → alle Monate neu berechnet
+    await async_import_statistics(hass, data.history, {"preis_wasser": 6.0})
+    await async_wait_recording_done(hass)
+    assert (await _monthly(hass, "vivawest:kaltwasser_kosten"))[10] == (21.0, 51.0)

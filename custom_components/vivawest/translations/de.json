@@ -27,6 +27,24 @@
       "wrong_account": "Die Zugangsdaten gehören zu einem anderen Vivawest-Konto."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Preise für Kostenstatistiken",
+        "description": "Für die importierten Vivawest-Statistiken kann das Energie-Dashboard selbst keine Kosten berechnen. Ist ein Preis gesetzt, importiert die Integration zusätzlich eine Kostenstatistik (z. B. `vivawest:kaltwasser_kosten`). Diese wählst du im Energie-Dashboard unter „Eine Entität verwenden, die die Gesamtkosten erfasst“. Eine Preisänderung berechnet alle Monate neu, die das Portal liefert.",
+        "data": {
+          "preis_wasser": "Wasserpreis",
+          "preis_warmwasser_energie": "Preis Warmwasser-Energie",
+          "preis_heizenergie": "Preis Heizenergie"
+        },
+        "data_description": {
+          "preis_wasser": "Wasserversorgung und Entwässerung pro m³, gilt für Kalt- und Warmwasser.",
+          "preis_warmwasser_energie": "Preis pro kWh für das Erwärmen des Warmwassers.",
+          "preis_heizenergie": "Preis pro kWh Heizenergie."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "kaltwasser": {

@@ -8,6 +8,7 @@ neuen oder geänderten Monat wird alles neu berechnet, damit die Summe stetig bl
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any
@@ -27,7 +28,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter, VolumeConverter
 
-from .const import DOMAIN, LOGGER
+from .const import (
+    CONF_PRICE_HEATING,
+    CONF_PRICE_HOT_WATER_ENERGY,
+    CONF_PRICE_WATER,
+    DOMAIN,
+    LOGGER,
+)
 
 # Abweichung, ab der ein Monat als geändert gilt (Werte haben 2 Nachkommastellen)
 TOLERANCE = 0.005
@@ -43,6 +50,7 @@ class StatDef:
     unit_class: str
     uvi_type: str
     field: str
+    price_key: str  # Option mit dem Preis pro Einheit
 
     @property
     def statistic_id(self) -> str:
@@ -51,13 +59,13 @@ class StatDef:
 
 STATISTICS: tuple[StatDef, ...] = (
     StatDef("kaltwasser", "Vivawest Kaltwasser", UnitOfVolume.CUBIC_METERS,
-            VolumeConverter.UNIT_CLASS, "kaltwasser", "verbrauchswert"),
+            VolumeConverter.UNIT_CLASS, "kaltwasser", "verbrauchswert", CONF_PRICE_WATER),
     StatDef("warmwasser", "Vivawest Warmwasser", UnitOfVolume.CUBIC_METERS,
-            VolumeConverter.UNIT_CLASS, "warmwasser", "verbrauchswert"),
+            VolumeConverter.UNIT_CLASS, "warmwasser", "verbrauchswert", CONF_PRICE_WATER),
     StatDef("warmwasser_energie", "Vivawest Warmwasser Energie", UnitOfEnergy.KILO_WATT_HOUR,
-            EnergyConverter.UNIT_CLASS, "warmwasser", "kwh"),
+            EnergyConverter.UNIT_CLASS, "warmwasser", "kwh", CONF_PRICE_HOT_WATER_ENERGY),
     StatDef("heizenergie", "Vivawest Heizenergie", UnitOfEnergy.KILO_WATT_HOUR,
-            EnergyConverter.UNIT_CLASS, "heizenergie", "kwh"),
+            EnergyConverter.UNIT_CLASS, "heizenergie", "kwh", CONF_PRICE_HEATING),
 )
 
 
@@ -153,39 +161,72 @@ async def _existing_month_sums(
 
 
 async def async_import_statistics(
-    hass: HomeAssistant, history: dict[str, list[dict[str, Any]]]
+    hass: HomeAssistant,
+    history: dict[str, list[dict[str, Any]]],
+    prices: Mapping[str, Any] | None = None,
 ) -> None:
-    """Importiert neue/geänderte Monate aller Statistiken."""
+    """Importiert neue/geänderte Monate aller Statistiken.
+
+    Ist für eine Statistik ein Preis gesetzt, entsteht zusätzlich ``<id>_kosten``
+    (Monatswert × Preis). Das Energie-Dashboard rechnet für externe Statistiken
+    selbst keine Kosten, kann aber eine Kostenstatistik verwenden.
+    """
     tz = dt_util.get_default_time_zone()
+    prices = prices or {}
     for stat in STATISTICS:
         values = month_values(history.get(stat.uvi_type, []), stat.field)
         if not values:
             continue
-        # Ein Jahr Puffer vor dem ältesten API-Monat, um die Startsumme zu finden
-        oldest = min(values)
-        since = month_start((oldest[0] - 1, oldest[1]), tz)
-        existing = await _existing_month_sums(hass, stat.statistic_id, since, tz)
-
-        plan, start_sum = plan_import(values, existing)
-        if not plan:
-            LOGGER.debug("Statistik %s ist aktuell", stat.statistic_id)
+        await _import_series(
+            hass, tz, values,
+            StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=stat.name,
+                source=DOMAIN,
+                statistic_id=stat.statistic_id,
+                unit_class=stat.unit_class,
+                unit_of_measurement=stat.unit,
+            ),
+        )
+        price = prices.get(stat.price_key)
+        if not price:
             continue
+        await _import_series(
+            hass, tz, {m: round(v * float(price), 4) for m, v in values.items()},
+            StatisticMetaData(
+                mean_type=StatisticMeanType.NONE,
+                has_sum=True,
+                name=f"{stat.name} Kosten",
+                source=DOMAIN,
+                statistic_id=f"{stat.statistic_id}_kosten",
+                unit_class=None,
+                unit_of_measurement=hass.config.currency,
+            ),
+        )
 
-        rows: list[StatisticData] = []
-        for month, value in plan:
-            rows.extend(distribute(month, value, start_sum, tz))
-            start_sum += value
-        metadata = StatisticMetaData(
-            mean_type=StatisticMeanType.NONE,
-            has_sum=True,
-            name=stat.name,
-            source=DOMAIN,
-            statistic_id=stat.statistic_id,
-            unit_class=stat.unit_class,
-            unit_of_measurement=stat.unit,
-        )
-        async_add_external_statistics(hass, metadata, rows)
-        LOGGER.info(
-            "Statistik %s: %d Monat(e) ab %02d/%d importiert",
-            stat.statistic_id, len(plan), plan[0][0][1], plan[0][0][0],
-        )
+
+async def _import_series(
+    hass: HomeAssistant, tz: tzinfo, values: dict[Month, float], metadata: StatisticMetaData
+) -> None:
+    """Schreibt die Monatswerte einer Statistik ab dem ersten neuen/geänderten Monat."""
+    statistic_id = metadata["statistic_id"]
+    # Ein Jahr Puffer vor dem ältesten API-Monat, um die Startsumme zu finden
+    oldest = min(values)
+    since = month_start((oldest[0] - 1, oldest[1]), tz)
+    existing = await _existing_month_sums(hass, statistic_id, since, tz)
+
+    plan, start_sum = plan_import(values, existing)
+    if not plan:
+        LOGGER.debug("Statistik %s ist aktuell", statistic_id)
+        return
+
+    rows: list[StatisticData] = []
+    for month, value in plan:
+        rows.extend(distribute(month, value, start_sum, tz))
+        start_sum += value
+    async_add_external_statistics(hass, metadata, rows)
+    LOGGER.info(
+        "Statistik %s: %d Monat(e) ab %02d/%d importiert",
+        statistic_id, len(plan), plan[0][0][1], plan[0][0][0],
+    )

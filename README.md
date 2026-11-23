@@ -92,8 +92,22 @@ gleichmäßig verteilt werden, sind Tages- und Wochenwerte Durchschnittswerte. D
 Monatssummen stimmen genau. Korrigiert Vivawest einen Monat nachträglich, wird er
 beim nächsten Abruf neu importiert.
 
-Preise pro m³ oder kWh stellt das Portal nicht bereit. Für die Kostenberechnung trägst du
-im Energie-Dashboard einen festen Preis ein, z. B. aus deiner letzten Abrechnung.
+### Kosten im Energie-Dashboard
+
+Für importierte Statistiken bietet das Energie-Dashboard **keinen festen Preis** an (die
+Optionen sind ausgegraut). Deshalb importiert die Integration die Kosten selbst:
+
+1. **Geräte & Dienste → Vivawest → Konfigurieren:** Preise eintragen (leer = keine Kosten).
+   - **Wasserpreis** (€/m³, gilt für Kalt- und Warmwasser): Wasserversorgung + Entwässerung
+     aus der Betriebskostenabrechnung, jeweils Gesamtkosten ÷ Gesamtverbrauch des Abrechnungskreises
+   - **Preis Warmwasser-Energie** und **Preis Heizenergie** (€/kWh): aus der Heizkostenabrechnung
+2. Es entstehen die Statistiken `vivawest:kaltwasser_kosten`, `vivawest:warmwasser_kosten`,
+   `vivawest:warmwasser_energie_kosten` und `vivawest:heizenergie_kosten`.
+3. Im Energie-Dashboard beim jeweiligen Verbrauch **„Eine Entität verwenden, die die
+   Gesamtkosten erfasst“** wählen und die passende Kostenstatistik auswählen.
+
+Eine Preisänderung berechnet alle Monate neu, die das Portal liefert (ca. 12). Fixkosten wie
+Zählermiete sind nicht enthalten.
 
 ## Umstieg vom früheren Add-on
 

@@ -31,7 +31,7 @@ custom_components/vivawest/
 ├── coordinator.py       # VivawestCoordinator (12 h), ruft Statistik-Import auf
 ├── statistics.py        # Monatsverteilung, plan_import(), async_import_statistics()
 ├── sensor.py            # SENSORS (EntityDescriptions), Konditions-Hilfsfunktionen
-├── config_flow.py       # user- und reauth-Schritt
+├── config_flow.py       # user- und reauth-Schritt, Optionen (Preise)
 ├── diagnostics.py       # Diagnose mit async_redact_data
 ├── icons.json           # Icons je translation_key
 ├── strings.json         # Quelle für Übersetzungen (Englisch, mit [%key:...%])
@@ -95,6 +95,10 @@ Basis-URL `https://api.kundenportal.vivawest.de/rest/` (bis 11/2026: `/api/` mit
   Recorder (`statistics_during_period`, Periode `month`). `plan_import()` vergleicht sie mit
   den API-Werten und importiert ab dem ersten neuen oder abweichenden Monat (Toleranz 0,005)
   alle Folgemonate neu, Startsumme = Summe am Ende des Vormonats.
+- Kosten: Das Energie-Dashboard rechnet für externe Statistiken keine Preise. Sind in den
+  Optionen (`OptionsFlowWithReload`, Keys `CONF_PRICE_*` in `const.py`, `StatDef.price_key`) Preise
+  gesetzt, entsteht zusätzlich `<id>_kosten` (Monatswert × Preis, Einheit `hass.config.currency`,
+  `unit_class=None`). Gleicher Import über `_import_series()`; Preisänderung → alle API-Monate neu.
 - Metadaten mit `mean_type=StatisticMeanType.NONE` und `unit_class` (`has_mean` gibt es seit HA 2026.4 nicht mehr).
 
 ## Sensoren (`sensor.py`)

@@ -43,7 +43,7 @@ class VivawestCoordinator(DataUpdateCoordinator[VivawestData]):
             raise UpdateFailed(str(err)) from err
 
         try:
-            await async_import_statistics(self.hass, data.history)
+            await async_import_statistics(self.hass, data.history, self.config_entry.options)
         except Exception:  # noqa: BLE001 – Statistik darf die Sensoren nicht blockieren
             LOGGER.exception("Statistik-Import fehlgeschlagen")
         return data
