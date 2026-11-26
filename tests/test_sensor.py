@@ -32,16 +32,9 @@ def entry(hass: HomeAssistant) -> MockConfigEntry:
 
 @pytest.fixture(autouse=True)
 def no_statistics(request):
-    """Statistik-Import und -Lesen in Sensortests abschalten (eigene Tests mit Recorder).
-
-    Beide laufen im Executor des Recorders, auf den async_block_till_done nicht wartet.
-    """
+    """Statistik-Import in Sensortests abschalten (eigener Test mit Recorder)."""
     from unittest.mock import patch
-    with (
-        patch("custom_components.vivawest.coordinator.async_import_statistics") as m,
-        patch("custom_components.vivawest.coordinator.async_read_monthly_values",
-              return_value={}),
-    ):
+    with patch("custom_components.vivawest.coordinator.async_import_statistics") as m:
         yield m
 
 
@@ -191,3 +184,15 @@ async def test_diagnostics_redacts(hass: HomeAssistant, entry, mock_client) -> N
     diag = await async_get_config_entry_diagnostics(hass, entry)
     assert diag["entry"][CONF_EMAIL] == "**REDACTED**"
     assert diag["entry"][CONF_PASSWORD] == "**REDACTED**"
+
+
+@pytest.mark.freeze_time("2026-11-23 10:00:00+01:00")
+async def test_forecast_with_prices(hass: HomeAssistant, entry, mock_client) -> None:
+    hass.config_entries.async_update_entry(entry, options={"preis_wasser": 5.0})
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    state = get_state(hass, "prognose_betriebskosten")
+    assert state.attributes["methode"] == "verbrauch"
+    assert state.attributes["monate_mit_verbrauchswerten"] == 3
+    # Keine Wasserposition in der Testabrechnung → Wasser kommt zur Vivawest-Prognose hinzu
+    assert float(state.state) == pytest.approx(1980 + 11.3 * 4 * 5 - 1790)

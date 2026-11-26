@@ -3,31 +3,51 @@
 Rechnung je Vorauszahlungsart (Betriebskosten, Heizkosten) für den laufenden
 Abrechnungszeitraum, also das Jahr nach der neuesten Abrechnung:
 
-    Ergebnis = erwartete Kosten − Vorauszahlungen im Zeitraum   (> 0 Nachzahlung)
+    Ergebnis = Fixkosten + Verbrauchskosten − Vorauszahlungen   (> 0 Nachzahlung)
 
-- Erwartete Kosten: Prognose von Vivawest aus der letzten Abrechnung
-  (``KostenMvPrognose``), sonst die Kosten der letzten Abrechnung.
-- Der verbrauchsabhängige Teil wird mit dem Verbrauch im Vorjahresvergleich
-  skaliert (gleiche Monate des laufenden Zeitraums gegen das Vorjahr).
-  Heizkosten: 70 % verbrauchsabhängig (HeizkostenV § 7, 50–70 %, bei älteren
-  Gebäuden 70 %). Betriebskosten: nur die Wasser-Positionen der Abrechnung.
-- Vorauszahlungen: Monatsbeträge aus den Mietkonditionen, für jeden Monat des
-  Zeitraums der dann gültige Betrag (auch künftige, bereits angekündigte Änderungen).
+- Vorauszahlungen: für jeden Monat der dann gültige Betrag laut Mietkonditionen
+  (inklusive angekündigter Änderungen).
+- Verbrauchskosten: tatsächlicher Monatsverbrauch des laufenden Zeitraums × Preis aus
+  den Optionen. Monate ohne Werte (Rest des Jahres) werden aus dem bisherigen Verbrauch
+  hochgerechnet, Heizung nach der Gradtagszahlen-Verteilung, Wasser gleichmäßig.
+- Fixkosten: kommen in keinen Verbrauchsdaten vor (Grundsteuer, Versicherung,
+  Grundkosten der Heizung …) und stammen deshalb aus der Prognose von Vivawest in der
+  letzten Abrechnung (sonst deren Kosten): Heizkosten 30 % (HeizkostenV § 7: 50–70 %
+  nach Verbrauch, bei älteren Gebäuden 70 %), Betriebskosten alles außer den
+  Wasser-Positionen.
+- Fehlt ein nötiger Preis oder gibt es noch zu wenig Verbrauchsdaten, gilt die Prognose
+  von Vivawest unverändert (``methode = "vivawest"``).
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 import re
 from typing import Any
 
 from .api import VivawestData
+from .const import CONF_PRICE_HEATING, CONF_PRICE_HOT_WATER_ENERGY, CONF_PRICE_WATER
 from .statistics import STATISTICS, month_values
+
+Month = tuple[int, int]
 
 # Anteil der Heizkosten, der nach Verbrauch verteilt wird
 HEATING_CONSUMPTION_SHARE = 0.7
-# Mindestanzahl vergleichbarer Monate für die Verbrauchsanpassung
-MIN_COMPARE_MONTHS = 2
+# Gradtagszahlen-Verteilung (Promille des Jahres-Heizbedarfs je Monat), wie sie bei
+# Zwischenablesungen in Heizkostenabrechnungen üblich ist
+HEATING_PROFILE = {1: 170, 2: 150, 3: 130, 4: 80, 5: 40, 6: 13.3, 7: 13.3, 8: 13.3,
+                   9: 30, 10: 80, 11: 120, 12: 160}
+# Mindestanteil am Jahres-Heizbedarf, den die Monate mit Werten abdecken müssen,
+# damit die Hochrechnung belastbar ist (nur Sommermonate reichen nicht)
+MIN_HEATING_SHARE = 100
+
+
+@dataclass(frozen=True, kw_only=True)
+class Series:
+    stat_key: str  # Key in STATISTICS
+    price_key: str  # Option mit dem Preis pro Einheit
+    seasonal: bool  # Heizung: Hochrechnung nach Gradtagszahlen
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -38,15 +58,18 @@ class ForecastKind:
     # Abrechnungsarten mit "heiz" im Namen gehören zu den Heizkosten, alle übrigen
     # (Betriebs-, Wasserkosten) zu den Betriebskosten.
     heating: bool
-    # Verbrauch für den Vorjahresvergleich: Statistik-Keys aus STATISTICS
-    consumption: tuple[str, ...]
+    series: tuple[Series, ...]
 
 
 FORECAST_KINDS = (
-    ForecastKind(key="prognose_betriebskosten", condtype="4000", heating=False,
-                 consumption=("kaltwasser", "warmwasser")),
-    ForecastKind(key="prognose_heizkosten", condtype="4010", heating=True,
-                 consumption=("heizenergie", "warmwasser_energie")),
+    ForecastKind(key="prognose_betriebskosten", condtype="4000", heating=False, series=(
+        Series(stat_key="kaltwasser", price_key=CONF_PRICE_WATER, seasonal=False),
+        Series(stat_key="warmwasser", price_key=CONF_PRICE_WATER, seasonal=False),
+    )),
+    ForecastKind(key="prognose_heizkosten", condtype="4010", heating=True, series=(
+        Series(stat_key="heizenergie", price_key=CONF_PRICE_HEATING, seasonal=True),
+        Series(stat_key="warmwasser_energie", price_key=CONF_PRICE_HOT_WATER_ENERGY, seasonal=False),
+    )),
 )
 
 
@@ -55,11 +78,14 @@ class Forecast:
     result: float
     period_from: date
     period_to: date
+    method: str  # "verbrauch" | "vivawest"
     expected_costs: float
-    cost_basis: float
-    cost_basis_source: str  # "prognose" | "vorjahr"
-    consumption_factor: float | None
-    compared_months: int
+    fixed_costs: float
+    consumption_costs_so_far: float | None
+    consumption_costs_rest: float | None
+    months_with_data: int
+    # Kosten minus Vorauszahlungen der Monate mit Verbrauchswerten (> 0 = im Rückstand)
+    balance_so_far: float | None
     prepayments_total: float
     prepayments_paid: float
     months: int
@@ -78,7 +104,7 @@ def _date(value: Any) -> date | None:
     return None
 
 
-def _months(start: date, end: date) -> list[tuple[int, int]]:
+def _months(start: date, end: date) -> list[Month]:
     """(Jahr, Monat) aller Monate von start bis end."""
     result = []
     year, month = start.year, start.month
@@ -112,10 +138,10 @@ def monthly_prepayment(conditions: list[dict[str, Any]], condtype: str,
     return None
 
 
-def prepayments(conditions: list[dict[str, Any]], condtype: str, months: list[tuple[int, int]],
-                today: date) -> tuple[float, float] | None:
-    """(Summe im Zeitraum, davon bis heute fällig). Monate vor dem ersten bekannten
-    Konditionszeitraum erhalten dessen Betrag (das Portal liefert nicht immer die Historie)."""
+def prepayments(conditions: list[dict[str, Any]], condtype: str,
+                months: list[Month]) -> dict[Month, float] | None:
+    """Vorauszahlung je Monat. Monate vor dem ersten bekannten Konditionszeitraum erhalten
+    dessen Betrag (das Portal liefert nicht immer die Historie)."""
     if not any(i.get("Condtype") == condtype for p in conditions
                for i in (p.get("ConditionItems") or {}).get("results") or []):
         return None
@@ -123,58 +149,53 @@ def prepayments(conditions: list[dict[str, Any]], condtype: str, months: list[tu
     known = [a for a in amounts if a is not None]
     if not known:
         return None
-    first = known[0]
-    amounts = [first if a is None else a for a in amounts]
-    paid = sum(a for (y, m), a in zip(months, amounts) if date(y, m, 1) <= today)
-    return round(sum(amounts), 2), round(paid, 2)
+    return {month: known[0] if a is None else a for month, a in zip(months, amounts)}
 
 
-def _consumption(data: VivawestData, keys: tuple[str, ...]) -> dict[tuple[int, int], float]:
-    """Monatsverbrauch (Summe der Statistiken); nur Monate, in denen alle einen Wert haben.
+def series_values(data: VivawestData, stat_key: str) -> dict[Month, float]:
+    """Monatsverbrauch einer Statistik aus dem Portal-Verlauf."""
+    stat = next(s for s in STATISTICS if s.key == stat_key)
+    return month_values(data.history.get(stat.uvi_type) or [], stat.field)
 
-    Basis ist die Langzeitstatistik, überschrieben vom aktuellen Portal-Verlauf.
+
+def project(values: dict[Month, float], months: list[Month],
+            seasonal: bool) -> tuple[float, float] | None:
+    """(Verbrauch bisher, hochgerechneter Verbrauch der Monate ohne Wert) im Zeitraum.
+
+    None, wenn die vorhandenen Monate keine belastbare Hochrechnung erlauben.
     """
-    per_key = []
-    for stat in STATISTICS:
-        if stat.key not in keys:
-            continue
-        values = dict(data.archive.get(stat.key) or {})
-        values.update(month_values(data.history.get(stat.uvi_type) or [], stat.field))
-        if values:
-            per_key.append(values)
-    if not per_key:
-        return {}
-    common = set.intersection(*(set(v) for v in per_key))
-    return {k: sum(v[k] for v in per_key) for k in common}
+    known = [m for m in months if m in values]
+    missing = [m for m in months if m not in values]
+    actual = sum(values[m] for m in known)
+    if not missing:
+        return actual, 0.0
+    if seasonal:
+        share = sum(HEATING_PROFILE[m] for _, m in known)
+        if share < MIN_HEATING_SHARE:
+            return None
+        return actual, actual / share * sum(HEATING_PROFILE[m] for _, m in missing)
+    if not known:
+        return None
+    return actual, actual / len(known) * len(missing)
 
 
-def consumption_factor(data: VivawestData, keys: tuple[str, ...],
-                       months: list[tuple[int, int]]) -> tuple[float | None, int]:
-    """Verbrauch der bisherigen Monate des Zeitraums ÷ Verbrauch derselben Monate im Vorjahr."""
-    values = _consumption(data, keys)
-    pairs = [(values[(y, m)], values[(y - 1, m)]) for y, m in months
-             if (y, m) in values and (y - 1, m) in values]
-    previous = sum(p for _, p in pairs)
-    if len(pairs) < MIN_COMPARE_MONTHS or previous <= 0:
-        return None, len(pairs)
-    return sum(c for c, _ in pairs) / previous, len(pairs)
-
-
-def _variable_share(kind: ForecastKind, name: str, settlement: dict[str, Any]) -> float:
-    """Anteil der Kosten einer Abrechnungsart, der vom Verbrauch abhängt."""
+def _fixed_share(kind: ForecastKind, name: str, settlement: dict[str, Any]) -> float:
+    """Anteil der Kosten einer Abrechnungsart, der nicht vom Verbrauch abhängt."""
     if kind.heating:
-        return HEATING_CONSUMPTION_SHARE
+        return 1 - HEATING_CONSUMPTION_SHARE
     if "wasser" in name.lower():
-        return 1.0
+        return 0.0
     costs = _float(settlement.get("KostenMv"))
     positions = (settlement.get("Nebenkostenschluessel") or {}).get("results") or []
     water = sum(_float(p.get("KostenNkslMv")) for p in positions
                 if "wasser" in (p.get("NkslText") or "").lower())
-    return min(water / costs, 1.0) if costs > 0 else 0.0
+    return max(1 - water / costs, 0.0) if costs > 0 else 1.0
 
 
-def calculate(data: VivawestData, kind: ForecastKind, today: date) -> Forecast | None:
+def calculate(data: VivawestData, kind: ForecastKind, today: date,
+              prices: Mapping[str, Any] | None = None) -> Forecast | None:
     """Prognose für eine Vorauszahlungsart; None, wenn Abrechnung oder Konditionen fehlen."""
+    prices = prices or {}
     settlements = {
         name: st for name, st in data.settlements.items()
         if ("heiz" in name.lower()) == kind.heating
@@ -183,36 +204,61 @@ def calculate(data: VivawestData, kind: ForecastKind, today: date) -> Forecast |
     if period is None:
         return None
     months = _months(*period)
-    paid = prepayments(data.conditions, kind.condtype, months, today)
-    if paid is None:
+    monthly = prepayments(data.conditions, kind.condtype, months)
+    if monthly is None:
         return None
 
-    factor, compared = consumption_factor(data, kind.consumption, months)
-    basis = expected = 0.0
-    from_forecast = False
+    basis = fixed = 0.0
     for name, st in settlements.items():
-        costs = _float(st.get("KostenMvPrognose"))
-        if costs > 0:
-            from_forecast = True
-        else:
-            costs = _float(st.get("KostenMv"))
+        costs = _float(st.get("KostenMvPrognose")) or _float(st.get("KostenMv"))
         basis += costs
-        share = _variable_share(kind, name, st)
-        expected += costs * (1 - share + share * (factor if factor is not None else 1.0))
+        fixed += costs * _fixed_share(kind, name, st)
     if basis <= 0:
         return None
 
-    total, paid_so_far = paid
+    # Verbrauchskosten aus den echten Monatswerten (nur Statistiken mit Daten)
+    so_far = rest = 0.0
+    data_months: set[Month] | None = None
+    method = "verbrauch"
+    for series in kind.series:
+        values = {m: v for m, v in series_values(data, series.stat_key).items() if m in monthly}
+        if not values:
+            continue
+        price = _float(prices.get(series.price_key))
+        projection = project(values, months, series.seasonal)
+        if price <= 0 or projection is None:
+            method = "vivawest"
+            break
+        so_far += projection[0] * price
+        rest += projection[1] * price
+        data_months = set(values) if data_months is None else data_months & set(values)
+    if data_months is None:  # gar keine Verbrauchsdaten im Zeitraum
+        method = "vivawest"
+
+    total_prepaid = sum(monthly.values())
+    paid = sum(a for (y, m), a in monthly.items() if date(y, m, 1) <= today)
+    if method == "vivawest":
+        expected, balance, so_far_out, rest_out, n_data = basis, None, None, None, 0
+    else:
+        expected = fixed + so_far + rest
+        n_data = len(data_months)
+        # Stand der Monate mit Verbrauchswerten: anteilige Fixkosten + echte Verbrauchskosten
+        balance = round(fixed * n_data / len(months) + so_far
+                        - sum(monthly[m] for m in data_months), 2)
+        so_far_out, rest_out = round(so_far, 2), round(rest, 2)
+
     return Forecast(
-        result=round(expected - total, 2),
+        result=round(expected - total_prepaid, 2),
         period_from=period[0],
         period_to=period[1],
+        method=method,
         expected_costs=round(expected, 2),
-        cost_basis=round(basis, 2),
-        cost_basis_source="prognose" if from_forecast else "vorjahr",
-        consumption_factor=factor,
-        compared_months=compared,
-        prepayments_total=total,
-        prepayments_paid=paid_so_far,
+        fixed_costs=round(fixed if method == "verbrauch" else basis, 2),
+        consumption_costs_so_far=so_far_out,
+        consumption_costs_rest=rest_out,
+        months_with_data=n_data,
+        balance_so_far=balance,
+        prepayments_total=round(total_prepaid, 2),
+        prepayments_paid=round(paid, 2),
         months=len(months),
     )

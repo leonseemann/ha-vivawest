@@ -106,14 +106,15 @@ Basis-URL `https://api.kundenportal.vivawest.de/rest/` (bis 11/2026: `/api/` mit
 
 - `FORECAST_KINDS`: Betriebskosten (Condtype `4000`) und Heizkosten (`4010`). Abrechnungsarten
   mit „heiz“ im Namen gehören zu den Heizkosten, alle anderen (auch Wasserkosten) zu den Betriebskosten.
-- Zeitraum = ein Jahr ab dem Tag nach dem neuesten `AbrechnungBis`. Ergebnis = erwartete Kosten −
-  Vorauszahlungen (Monatsbeträge aus den Konditionen; Monate vor dem ersten bekannten Zeitraum
-  bekommen dessen Betrag). > 0 = Nachzahlung, wie `AeErgebnis`.
-- Kostenbasis `KostenMvPrognose`, sonst `KostenMv`. Verbrauchsanteil (Heizung
-  `HEATING_CONSUMPTION_SHARE`, Betriebskosten = Positionen mit „wasser“) wird mit dem
-  Vorjahresverhältnis derselben Monate skaliert (mind. `MIN_COMPARE_MONTHS`).
-- Vorjahresmonate: `VivawestData.archive`, vom Coordinator nach dem Import per
-  `async_read_monthly_values()` aus dem Recorder gelesen, überschrieben vom Portal-Verlauf.
+- Zeitraum = ein Jahr ab dem Tag nach dem neuesten `AbrechnungBis`. Ergebnis = Fixkosten +
+  Verbrauchskosten − Vorauszahlungen (Monatsbeträge aus den Konditionen; Monate vor dem ersten
+  bekannten Zeitraum bekommen dessen Betrag). > 0 = Nachzahlung, wie `AeErgebnis`.
+- Verbrauchskosten: Portal-Verlauf (`Series` → `STATISTICS`) × Preis aus den Optionen
+  (`VivawestData.prices`, vom Coordinator gesetzt). Fehlende Monate: `project()` –
+  Heizung nach `HEATING_PROFILE` (Gradtagszahlen, mind. `MIN_HEATING_SHARE` ‰ bekannt), sonst linear.
+- Fixkosten aus `KostenMvPrognose` (sonst `KostenMv`): Heizung `1 − HEATING_CONSUMPTION_SHARE`,
+  Betriebskosten ohne Positionen mit „wasser“. Fehlt ein Preis → `methode = "vivawest"`.
+- Bewusst kein Vorjahresvergleich: Die Prognose soll auf den aktuellen Werten beruhen.
 
 ## Sensoren (`sensor.py`)
 

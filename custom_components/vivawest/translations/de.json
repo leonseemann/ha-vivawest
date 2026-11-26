@@ -31,7 +31,7 @@
     "step": {
       "init": {
         "title": "Preise für Kostenstatistiken",
-        "description": "Für die importierten Vivawest-Statistiken kann das Energie-Dashboard selbst keine Kosten berechnen. Ist ein Preis gesetzt, importiert die Integration zusätzlich eine Kostenstatistik (z. B. `vivawest:kaltwasser_kosten`). Diese wählst du im Energie-Dashboard unter „Eine Entität verwenden, die die Gesamtkosten erfasst“. Eine Preisänderung berechnet alle Monate neu, die das Portal liefert.",
+        "description": "Für die importierten Vivawest-Statistiken kann das Energie-Dashboard selbst keine Kosten berechnen. Ist ein Preis gesetzt, importiert die Integration zusätzlich eine Kostenstatistik (z. B. `vivawest:kaltwasser_kosten`). Diese wählst du im Energie-Dashboard unter „Eine Entität verwenden, die die Gesamtkosten erfasst“. Eine Preisänderung berechnet alle Monate neu, die das Portal liefert. Die Preise nutzt auch die Prognose der nächsten Abrechnung (echter Verbrauch × Preis).",
         "data": {
           "preis_wasser": "Wasserpreis",
           "preis_warmwasser_energie": "Preis Warmwasser-Energie",
@@ -39,8 +39,8 @@
         },
         "data_description": {
           "preis_wasser": "Wasserversorgung und Entwässerung pro m³, gilt für Kalt- und Warmwasser.",
-          "preis_warmwasser_energie": "Preis pro kWh für das Erwärmen des Warmwassers.",
-          "preis_heizenergie": "Preis pro kWh Heizenergie."
+          "preis_warmwasser_energie": "Preis pro kWh für das Erwärmen des Warmwassers. Für die Prognose der Heizkosten nur die Verbrauchskosten ohne Grundkosten (Verbrauchskosten ÷ Verbrauch laut Heizkostenabrechnung).",
+          "preis_heizenergie": "Preis pro kWh Heizenergie. Für die Prognose der Heizkosten nur die Verbrauchskosten ohne Grundkosten (Verbrauchskosten ÷ Verbrauch laut Heizkostenabrechnung)."
         }
       }
     }

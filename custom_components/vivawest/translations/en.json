@@ -31,7 +31,7 @@
     "step": {
       "init": {
         "title": "Prices for cost statistics",
-        "description": "The energy dashboard cannot calculate costs for the imported Vivawest statistics itself. With a price set, the integration additionally imports a cost statistic (e.g. `vivawest:kaltwasser_kosten`), which you select in the energy dashboard under \"Use an entity tracking the total costs\". Changing a price recalculates all months the portal provides.",
+        "description": "The energy dashboard cannot calculate costs for the imported Vivawest statistics itself. With a price set, the integration additionally imports a cost statistic (e.g. `vivawest:kaltwasser_kosten`), which you select in the energy dashboard under \"Use an entity tracking the total costs\". Changing a price recalculates all months the portal provides. The prices are also used to forecast the next settlement (actual consumption × price).",
         "data": {
           "preis_wasser": "Water price",
           "preis_warmwasser_energie": "Hot water energy price",
@@ -39,8 +39,8 @@
         },
         "data_description": {
           "preis_wasser": "Water supply and sewage per m³, used for cold and hot water.",
-          "preis_warmwasser_energie": "Price per kWh for heating the hot water.",
-          "preis_heizenergie": "Price per kWh of heating energy."
+          "preis_warmwasser_energie": "Price per kWh for heating the hot water. For the heating costs forecast, use the consumption costs only, without base costs (consumption costs ÷ consumption from the heating cost settlement).",
+          "preis_heizenergie": "Price per kWh of heating energy. For the heating costs forecast, use the consumption costs only, without base costs (consumption costs ÷ consumption from the heating cost settlement)."
         }
       }
     }

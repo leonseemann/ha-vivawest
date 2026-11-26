@@ -80,24 +80,29 @@ Alle Sensoren gehören zum Gerät **Vivawest**.
   `kosten`, `kosten_vorjahr`, `geleistete_vorauszahlungen`, `prognose`, `neue_vorauszahlung`,
   `positionen` und, falls angegeben, `faellig_am` / `betrag_faellig`.
 - **Prognosesensoren:** Schätzung für den laufenden Abrechnungszeitraum (das Jahr nach der
-  neuesten Abrechnung):
-  `Ergebnis = erwartete Kosten − Vorauszahlungen im Zeitraum`.
-  - *Erwartete Kosten:* die Prognose von Vivawest aus der letzten Abrechnung, sonst deren
-    Kosten. Der verbrauchsabhängige Teil wird mit dem eigenen Verbrauch im Vorjahresvergleich
-    (dieselben Monate) hochgerechnet: bei den Heizkosten 70 % (Heizung + Warmwasser in kWh),
-    bei den Betriebskosten die Wasserpositionen (Kalt- + Warmwasser in m³). Wasserkosten mit
-    eigener Abrechnung zählen zu den Betriebskosten.
+  neuesten Abrechnung), so weit wie möglich aus den aktuellen Verbrauchswerten:
+  `Ergebnis = Fixkosten + Verbrauchskosten − Vorauszahlungen`.
   - *Vorauszahlungen:* für jeden Monat der dann gültige Betrag laut Mietkonditionen,
     inklusive angekündigter Änderungen.
-  - Der Vorjahresvergleich braucht Vorjahresmonate. Das Portal liefert nur ca. 12 Monate,
-    ältere kommen aus der Langzeitstatistik der Integration. Bis genug Daten da sind, gilt
-    die Kostenbasis unverändert (`verglichene_monate: 0`).
-  - Attribute: `ergebnis`, `zeitraum_von/bis`, `erwartete_kosten`, `kostenbasis`,
-    `kostenbasis_quelle` (`prognose`/`vorjahr`), `vorauszahlungen_gesamt`,
-    `vorauszahlungen_bisher`, `kostendeckende_vorauszahlung` (Monatsbetrag, der die
-    erwarteten Kosten genau deckt), `verglichene_monate`, `verbrauch_vorjahr_prozent`.
-  - Preisänderungen beim Versorger kennt die Integration nur, soweit sie in der Prognose von
-    Vivawest stecken. Das Ergebnis ist eine Schätzung, keine Abrechnung.
+  - *Verbrauchskosten:* echter Monatsverbrauch des Zeitraums × Preis aus den Optionen
+    (Betriebskosten: Kalt- + Warmwasser in m³ × Wasserpreis; Heizkosten: Heizung und
+    Warmwasser in kWh × Energiepreise). Monate ohne Werte werden aus dem bisherigen Verbrauch
+    hochgerechnet: Wasser gleichmäßig, Heizung nach der üblichen Gradtagszahlen-Verteilung
+    (Januar 17 %, Juli 1,3 % des Jahresbedarfs).
+  - *Fixkosten:* stehen in keinen Verbrauchsdaten (Grundsteuer, Versicherung, Müll,
+    Grundkosten der Heizung …) und kommen aus der Prognose von Vivawest in der letzten
+    Abrechnung: bei den Heizkosten 30 %, bei den Betriebskosten alles außer den
+    Wasserpositionen. Eine eigene Wasserkosten-Abrechnung zählt zu den Betriebskosten.
+  - Ohne Preis (oder bei Heizung nur mit Sommermonaten) gilt die Vivawest-Prognose
+    unverändert (`methode: vivawest`).
+  - Attribute: `ergebnis`, `methode`, `zeitraum_von/bis`, `erwartete_kosten`, `fixkosten`,
+    `vorauszahlungen_gesamt`, `vorauszahlungen_bisher`, `kostendeckende_vorauszahlung`
+    (Monatsbetrag, der die erwarteten Kosten genau deckt) und mit Preisen
+    `verbrauchskosten_bisher`, `verbrauchskosten_hochgerechnet`,
+    `monate_mit_verbrauchswerten` sowie `stand_bisher` (anteilige Fixkosten + echte
+    Verbrauchskosten − Vorauszahlungen der Monate mit Werten; > 0 = im Rückstand).
+  - Für die Heizkosten-Prognose als Preis nur die Verbrauchskosten ohne Grundkosten
+    eintragen. Das Ergebnis ist eine Schätzung, keine Abrechnung.
 
 ## Energie-Dashboard
 

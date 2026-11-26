@@ -160,27 +160,6 @@ async def _existing_month_sums(
     return result
 
 
-async def async_read_monthly_values(hass: HomeAssistant, years: int = 3) -> dict[str, dict[Month, float]]:
-    """Monatsverbräuche aller Statistiken aus dem Recorder ({key: {(jahr, monat): wert}}).
-
-    Ergänzt den Verlauf des Portals (ca. 12 Monate) um ältere Monate, z. B. für den
-    Vorjahresvergleich der Abrechnungsprognose. Monatswert = Differenz der Summen
-    aufeinanderfolgender Monate; Monate ohne Vormonat entfallen.
-    """
-    tz = dt_util.get_default_time_zone()
-    now = dt_util.now(tz)
-    since = month_start((now.year - years, now.month), tz)
-    result: dict[str, dict[Month, float]] = {}
-    for stat in STATISTICS:
-        sums = await _existing_month_sums(hass, stat.statistic_id, since, tz)
-        result[stat.key] = {
-            month: round(total - sums[prev], 4)
-            for month, total in sums.items()
-            if (prev := (month[0] - (month[1] == 1), (month[1] - 2) % 12 + 1)) in sums
-        }
-    return result
-
-
 async def async_import_statistics(
     hass: HomeAssistant,
     history: dict[str, list[dict[str, Any]]],

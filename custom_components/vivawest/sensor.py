@@ -222,30 +222,36 @@ def settlement_attributes(data: VivawestData, kind: str) -> dict[str, Any]:
 # Prognose der nächsten Abrechnung
 # ---------------------------------------------------------------------------
 def forecast_value(data: VivawestData, kind: ForecastKind) -> float | None:
-    forecast = calculate(data, kind, dt_util.now().date())
+    forecast = calculate(data, kind, dt_util.now().date(), data.prices)
     return None if forecast is None else forecast.result
 
 
 def forecast_attributes(data: VivawestData, kind: ForecastKind) -> dict[str, Any]:
-    fc = calculate(data, kind, dt_util.now().date())
+    fc = calculate(data, kind, dt_util.now().date(), data.prices)
     if fc is None:
         return {}
     attrs: dict[str, Any] = {
         # Vorzeichen wie bei den Abrechnungen: > 0 Nachzahlung, sonst Guthaben
         "ergebnis": "Nachzahlung" if fc.result > 0 else "Guthaben",
+        # "verbrauch": echte Verbrauchswerte × Preise, "vivawest": Prognose aus der Abrechnung
+        "methode": fc.method,
         "zeitraum_von": fc.period_from.isoformat(),
         "zeitraum_bis": fc.period_to.isoformat(),
         "erwartete_kosten": fc.expected_costs,
-        "kostenbasis": fc.cost_basis,
-        "kostenbasis_quelle": fc.cost_basis_source,
+        "fixkosten": fc.fixed_costs,
         "vorauszahlungen_gesamt": fc.prepayments_total,
         "vorauszahlungen_bisher": fc.prepayments_paid,
         # Monatliche Vorauszahlung, die die erwarteten Kosten genau decken würde
         "kostendeckende_vorauszahlung": round(fc.expected_costs / fc.months, 2),
-        "verglichene_monate": fc.compared_months,
     }
-    if fc.consumption_factor is not None:
-        attrs["verbrauch_vorjahr_prozent"] = round((fc.consumption_factor - 1) * 100, 1)
+    if fc.method == "verbrauch":
+        attrs |= {
+            "monate_mit_verbrauchswerten": fc.months_with_data,
+            "verbrauchskosten_bisher": fc.consumption_costs_so_far,
+            "verbrauchskosten_hochgerechnet": fc.consumption_costs_rest,
+            # Kosten − Vorauszahlungen der Monate mit Verbrauchswerten (> 0 = Rückstand)
+            "stand_bisher": fc.balance_so_far,
+        }
     return attrs
 
 
