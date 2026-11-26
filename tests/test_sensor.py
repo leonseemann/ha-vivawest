@@ -32,9 +32,16 @@ def entry(hass: HomeAssistant) -> MockConfigEntry:
 
 @pytest.fixture(autouse=True)
 def no_statistics(request):
-    """Statistik-Import in Sensortests abschalten (eigener Test mit Recorder)."""
+    """Statistik-Import und -Lesen in Sensortests abschalten (eigene Tests mit Recorder).
+
+    Beide laufen im Executor des Recorders, auf den async_block_till_done nicht wartet.
+    """
     from unittest.mock import patch
-    with patch("custom_components.vivawest.coordinator.async_import_statistics") as m:
+    with (
+        patch("custom_components.vivawest.coordinator.async_import_statistics") as m,
+        patch("custom_components.vivawest.coordinator.async_read_monthly_values",
+              return_value={}),
+    ):
         yield m
 
 
