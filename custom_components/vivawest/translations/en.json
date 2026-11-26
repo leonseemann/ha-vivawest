@@ -92,6 +92,12 @@
       "abrechnung": {
         "name": "Settlement {art}"
       },
+      "prognose_betriebskosten": {
+        "name": "Operating costs forecast"
+      },
+      "prognose_heizkosten": {
+        "name": "Heating costs forecast"
+      },
       "zaehler_kaltwasser": {
         "name": "Cold water meter {raum}"
       },

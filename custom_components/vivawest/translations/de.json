@@ -92,6 +92,12 @@
       "abrechnung": {
         "name": "Abrechnung {art}"
       },
+      "prognose_betriebskosten": {
+        "name": "Prognose Betriebskosten"
+      },
+      "prognose_heizkosten": {
+        "name": "Prognose Heizkosten"
+      },
       "zaehler_kaltwasser": {
         "name": "Kaltwasserzähler {raum}"
       },

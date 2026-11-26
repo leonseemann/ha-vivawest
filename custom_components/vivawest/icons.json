@@ -49,6 +49,12 @@
       "abrechnung": {
         "default": "mdi:receipt-text-outline"
       },
+      "prognose_betriebskosten": {
+        "default": "mdi:calculator-variant"
+      },
+      "prognose_heizkosten": {
+        "default": "mdi:calculator-variant"
+      },
       "zaehler_kaltwasser": {
         "default": "mdi:counter"
       },

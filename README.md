@@ -61,6 +61,8 @@ Alle Sensoren gehören zum Gerät **Vivawest**.
 | Warmwasserzähler *Raum* (+ Energie) | m³ / kWh | Zählerstand eines Einzelzählers |
 | Heizkostenverteiler *Raum* | VE | Stand eines Heizkostenverteilers |
 | Abrechnung *Art* | EUR | Ergebnis der neuesten Abrechnung je Art (Betriebs-, Heiz-, Wasserkosten): positiv = Nachzahlung, negativ = Guthaben |
+| Prognose Betriebskosten | EUR | Erwartete Nachzahlung (positiv) oder Guthaben (negativ) der nächsten Betriebskostenabrechnung |
+| Prognose Heizkosten | EUR | Dasselbe für die Heizkosten |
 | Ungelesene Nachrichten | | Postfach im Portal |
 | Neuigkeiten im Portal | | Benachrichtigungszähler des Portals |
 | Offene Schadensmeldungen | | Anzahl, Attribut `meldungen` mit Schaden, Status und Termin |
@@ -77,6 +79,25 @@ Alle Sensoren gehören zum Gerät **Vivawest**.
 - **Abrechnungssensoren:** Attribute `ergebnis` (Nachzahlung/Guthaben), `zeitraum_von/bis`,
   `kosten`, `kosten_vorjahr`, `geleistete_vorauszahlungen`, `prognose`, `neue_vorauszahlung`,
   `positionen` und, falls angegeben, `faellig_am` / `betrag_faellig`.
+- **Prognosesensoren:** Schätzung für den laufenden Abrechnungszeitraum (das Jahr nach der
+  neuesten Abrechnung):
+  `Ergebnis = erwartete Kosten − Vorauszahlungen im Zeitraum`.
+  - *Erwartete Kosten:* die Prognose von Vivawest aus der letzten Abrechnung, sonst deren
+    Kosten. Der verbrauchsabhängige Teil wird mit dem eigenen Verbrauch im Vorjahresvergleich
+    (dieselben Monate) hochgerechnet: bei den Heizkosten 70 % (Heizung + Warmwasser in kWh),
+    bei den Betriebskosten die Wasserpositionen (Kalt- + Warmwasser in m³). Wasserkosten mit
+    eigener Abrechnung zählen zu den Betriebskosten.
+  - *Vorauszahlungen:* für jeden Monat der dann gültige Betrag laut Mietkonditionen,
+    inklusive angekündigter Änderungen.
+  - Der Vorjahresvergleich braucht Vorjahresmonate. Das Portal liefert nur ca. 12 Monate,
+    ältere kommen aus der Langzeitstatistik der Integration. Bis genug Daten da sind, gilt
+    die Kostenbasis unverändert (`verglichene_monate: 0`).
+  - Attribute: `ergebnis`, `zeitraum_von/bis`, `erwartete_kosten`, `kostenbasis`,
+    `kostenbasis_quelle` (`prognose`/`vorjahr`), `vorauszahlungen_gesamt`,
+    `vorauszahlungen_bisher`, `kostendeckende_vorauszahlung` (Monatsbetrag, der die
+    erwarteten Kosten genau deckt), `verglichene_monate`, `verbrauch_vorjahr_prozent`.
+  - Preisänderungen beim Versorger kennt die Integration nur, soweit sie in der Prognose von
+    Vivawest stecken. Das Ergebnis ist eine Schätzung, keine Abrechnung.
 
 ## Energie-Dashboard
 

@@ -22,6 +22,7 @@ from homeassistant.util import dt as dt_util, slugify
 
 from .api import VivawestData
 from .const import DOMAIN
+from .forecast import FORECAST_KINDS, ForecastKind, calculate
 from .coordinator import VivawestConfigEntry, VivawestCoordinator
 
 
@@ -218,6 +219,37 @@ def settlement_attributes(data: VivawestData, kind: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Prognose der nächsten Abrechnung
+# ---------------------------------------------------------------------------
+def forecast_value(data: VivawestData, kind: ForecastKind) -> float | None:
+    forecast = calculate(data, kind, dt_util.now().date())
+    return None if forecast is None else forecast.result
+
+
+def forecast_attributes(data: VivawestData, kind: ForecastKind) -> dict[str, Any]:
+    fc = calculate(data, kind, dt_util.now().date())
+    if fc is None:
+        return {}
+    attrs: dict[str, Any] = {
+        # Vorzeichen wie bei den Abrechnungen: > 0 Nachzahlung, sonst Guthaben
+        "ergebnis": "Nachzahlung" if fc.result > 0 else "Guthaben",
+        "zeitraum_von": fc.period_from.isoformat(),
+        "zeitraum_bis": fc.period_to.isoformat(),
+        "erwartete_kosten": fc.expected_costs,
+        "kostenbasis": fc.cost_basis,
+        "kostenbasis_quelle": fc.cost_basis_source,
+        "vorauszahlungen_gesamt": fc.prepayments_total,
+        "vorauszahlungen_bisher": fc.prepayments_paid,
+        # Monatliche Vorauszahlung, die die erwarteten Kosten genau decken würde
+        "kostendeckende_vorauszahlung": round(fc.expected_costs / fc.months, 2),
+        "verglichene_monate": fc.compared_months,
+    }
+    if fc.consumption_factor is not None:
+        attrs["verbrauch_vorjahr_prozent"] = round((fc.consumption_factor - 1) * 100, 1)
+    return attrs
+
+
+# ---------------------------------------------------------------------------
 # Schadensmeldungen und Postfach
 # ---------------------------------------------------------------------------
 def damage_appointment(damage: dict[str, Any]) -> datetime | None:
@@ -309,6 +341,18 @@ SENSORS: tuple[VivawestSensorDescription, ...] = (
     _cost("vorauszahlung_betriebskosten", "4000"),
     _cost("vorauszahlung_heizkosten", "4010"),
     _cost("tv_versorgung", "3760"),
+    *(
+        VivawestSensorDescription(
+            key=kind.key,
+            translation_key=kind.key,
+            native_unit_of_measurement=CURRENCY_EURO,
+            device_class=SensorDeviceClass.MONETARY,
+            suggested_display_precision=2,
+            value_fn=lambda d, k=kind: forecast_value(d, k),
+            attrs_fn=lambda d, k=kind: forecast_attributes(d, k),
+        )
+        for kind in FORECAST_KINDS
+    ),
     VivawestSensorDescription(
         key="ungelesene_nachrichten",
         translation_key="ungelesene_nachrichten",

@@ -64,6 +64,14 @@ async def test_sensors(hass: HomeAssistant, entry, mock_client) -> None:
     assert "naechster_betrag" not in get_state(hass, "vorauszahlung_heizkosten").attributes
 
     assert float(get_state(hass, "tv_versorgung").state) == 10.0
+
+    prognose = get_state(hass, "prognose_betriebskosten")
+    assert float(prognose.state) == 190.0
+    assert prognose.attributes["ergebnis"] == "Nachzahlung"
+    assert prognose.attributes["zeitraum_von"] == "2026-01-01"
+    assert prognose.attributes["vorauszahlungen_bisher"] == 1650.0
+    assert prognose.attributes["kostendeckende_vorauszahlung"] == 165.0
+    assert get_state(hass, "prognose_heizkosten").state == STATE_UNAVAILABLE
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 

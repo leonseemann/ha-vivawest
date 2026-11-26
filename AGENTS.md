@@ -30,6 +30,7 @@ custom_components/vivawest/
 ├── api.py               # VivawestClient (aiohttp), VivawestData, Fehlerklassen
 ├── coordinator.py       # VivawestCoordinator (12 h), ruft Statistik-Import auf
 ├── statistics.py        # Monatsverteilung, plan_import(), async_import_statistics()
+├── forecast.py          # Prognose der nächsten Abrechnung (Nachzahlung/Guthaben)
 ├── sensor.py            # SENSORS (EntityDescriptions), Konditions-Hilfsfunktionen
 ├── config_flow.py       # user- und reauth-Schritt, Optionen (Preise)
 ├── diagnostics.py       # Diagnose mit async_redact_data
@@ -100,6 +101,19 @@ Basis-URL `https://api.kundenportal.vivawest.de/rest/` (bis 11/2026: `/api/` mit
   gesetzt, entsteht zusätzlich `<id>_kosten` (Monatswert × Preis, Einheit `hass.config.currency`,
   `unit_class=None`). Gleicher Import über `_import_series()`; Preisänderung → alle API-Monate neu.
 - Metadaten mit `mean_type=StatisticMeanType.NONE` und `unit_class` (`has_mean` gibt es seit HA 2026.4 nicht mehr).
+
+## Abrechnungsprognose (`forecast.py`)
+
+- `FORECAST_KINDS`: Betriebskosten (Condtype `4000`) und Heizkosten (`4010`). Abrechnungsarten
+  mit „heiz“ im Namen gehören zu den Heizkosten, alle anderen (auch Wasserkosten) zu den Betriebskosten.
+- Zeitraum = ein Jahr ab dem Tag nach dem neuesten `AbrechnungBis`. Ergebnis = erwartete Kosten −
+  Vorauszahlungen (Monatsbeträge aus den Konditionen; Monate vor dem ersten bekannten Zeitraum
+  bekommen dessen Betrag). > 0 = Nachzahlung, wie `AeErgebnis`.
+- Kostenbasis `KostenMvPrognose`, sonst `KostenMv`. Verbrauchsanteil (Heizung
+  `HEATING_CONSUMPTION_SHARE`, Betriebskosten = Positionen mit „wasser“) wird mit dem
+  Vorjahresverhältnis derselben Monate skaliert (mind. `MIN_COMPARE_MONTHS`).
+- Vorjahresmonate: `VivawestData.archive`, vom Coordinator nach dem Import per
+  `async_read_monthly_values()` aus dem Recorder gelesen, überschrieben vom Portal-Verlauf.
 
 ## Sensoren (`sensor.py`)
 

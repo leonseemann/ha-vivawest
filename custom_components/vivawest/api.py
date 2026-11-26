@@ -57,6 +57,9 @@ class VivawestData:
     meters: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     # Neueste Nebenkostenabrechnung je Art: {"Betriebskosten": {settlement-Objekt}}
     settlements: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Monatswerte aus der Langzeitstatistik je Statistik-Key (vom Coordinator ergänzt,
+    # reicht weiter zurück als der Portal-Verlauf): {"kaltwasser": {(jahr, monat): wert}}
+    archive: dict[str, dict[tuple[int, int], float]] = field(default_factory=dict)
     # Optionale Zusatzdaten; None = nicht abrufbar
     unread_messages: int | None = None
     open_damages: list[dict[str, Any]] | None = None

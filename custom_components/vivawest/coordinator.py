@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import VivawestAuthError, VivawestClient, VivawestData, VivawestError
 from .const import DOMAIN, LOGGER, UPDATE_INTERVAL
-from .statistics import async_import_statistics
+from .statistics import async_import_statistics, async_read_monthly_values
 
 type VivawestConfigEntry = ConfigEntry[VivawestCoordinator]
 
@@ -46,4 +46,8 @@ class VivawestCoordinator(DataUpdateCoordinator[VivawestData]):
             await async_import_statistics(self.hass, data.history, self.config_entry.options)
         except Exception:  # noqa: BLE001 – Statistik darf die Sensoren nicht blockieren
             LOGGER.exception("Statistik-Import fehlgeschlagen")
+        try:
+            data.archive = await async_read_monthly_values(self.hass)
+        except Exception:  # noqa: BLE001 – nur für den Vorjahresvergleich der Prognose
+            LOGGER.exception("Lesen der Langzeitstatistik fehlgeschlagen")
         return data

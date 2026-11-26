@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.vivawest.statistics import (
     async_import_statistics,
+    async_read_monthly_values,
     distribute,
     month_hours,
     plan_import,
@@ -83,6 +84,17 @@ async def test_import_roundtrip(recorder_mock: Recorder, hass: HomeAssistant) ->
     await async_wait_recording_done(hass)
     assert await _monthly(hass, "vivawest:kaltwasser") == {
         8: (3.4, 3.4), 9: (2.0, 5.4), 10: (3.5, 8.9), 11: (4.0, 12.9)}
+
+
+@pytest.mark.freeze_time("2026-11-23 10:00:00+01:00")
+async def test_read_monthly_values(recorder_mock: Recorder, hass: HomeAssistant) -> None:
+    await hass.config.async_update(time_zone="Europe/Berlin")
+    await async_import_statistics(hass, make_data().history)
+    await async_wait_recording_done(hass)
+    archive = await async_read_monthly_values(hass)
+    # August hat keinen Vormonat in der Statistik → entfällt
+    assert archive["kaltwasser"] == {(2026, 9): 1.6, (2026, 10): 3.5}
+    assert archive["heizenergie"] == {(2026, 9): 0.0, (2026, 10): 82.0}
 
 
 async def test_cost_statistics(recorder_mock: Recorder, hass: HomeAssistant) -> None:
